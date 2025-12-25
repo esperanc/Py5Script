@@ -44,7 +44,67 @@ This IDE simplifies writing p5.js sketches in Python by abstracting away the glo
 The IDE uses a unified storage system for everything.
 
 - **Storage**: All files are stored in your browser's `localStorage` under a single project key.
-- **Assets**: Images and data files are converted to Data URLs and stored alongside your code. They are automatically available to your sketch via standard file functions (`open()`, `loadImage()`, etc.).
-- **Persistence**: Your workspace is auto-saved locally. However, to permanently save a specific version or share it, use the **Save** button to download a Zip.
-- **Zip Files**: A `project.zip` contains every file in your file panel. Loading it restores the exact state of your workspace.
+### Modes: IDE vs Viewer
+The project offers two ways to interact with sketches:
 
+1.  **IDE Mode (`ide.html`)**: The full integrated development environment.
+    - Allows editing code, managing files, and running sketches.
+    - Shows the file panel, editor, and console.
+    - **Use case**: Developing, debugging, or remixing code.
+
+2.  **Viewer Mode (`view.html`)**: A minimal, full-screen runner.
+    - Displays only the running sketch canvas.
+    - Hidden controls (hover to see) for basic actions like "Edit in IDE" or viewing logs.
+    - **Use case**: Sharing finished projects or embedding in other pages.
+
+### URL Parameters
+You can load sketches or projects directly via URL parameters in **both** `ide.html` and `view.html`.
+
+- `?sketch=<url>`: Loads a project from an external URL. This can be:
+    - A single Python file (`.py`): e.g., `?sketch=demo/webGLDemo.py`
+    - A compressed Project (`.zip`): e.g., `?sketch=demo/loadImageDemo.zip`
+- `?code=<lz_string>`: Loads a raw code snippet compressed with LZString (used by the Share button).
+
+## Deployment & Hosting
+
+### GitHub Pages (Live Demo)
+This project is deployed and ready to use at:  
+**[https://esperanc.github.io/Py5Script/](https://esperanc.github.io/Py5Script/)** (redirects to IDE)
+
+**Examples:**
+- **Run WebGL Demo in IDE**:  
+  [https://esperanc.github.io/Py5Script/ide.html?sketch=demo/webGLDemo.py](https://esperanc.github.io/Py5Script/ide.html?sketch=demo/webGLDemo.py)
+- **Run WebGL Demo in Viewer**:  
+  [https://esperanc.github.io/Py5Script/view.html?sketch=demo/webGLDemo.py](https://esperanc.github.io/Py5Script/view.html?sketch=demo/webGLDemo.py)
+
+### Deployment Instructions
+This project is designed to be easily hosted on GitHub Pages.
+
+1.  **Push to Main**: The `main` branch now contains an `index.html` that automatically redirects to `ide.html`.
+2.  **Settings**: Go to your Repository Settings -> **Pages**.
+3.  **Source**: Select "Deploy from a branch" and choose **main**.
+4.  **Visit**: Your IDE will be available at `https://<username>.github.io/<repo-name>/`.
+
+**Loading Demos on GitHub Pages**:
+If you check in your demo files to the repository (e.g., in a `demo/` folder), you can share links effectively:
+- `https://<user>.github.io/<repo>/ide.html?sketch=demo/mySketch.py`
+- `https://<user>.github.io/<repo>/ide.html?sketch=demo/project.zip`
+
+### Local Hosting
+To run the IDE locally (e.g., for development or private use), you need a local web server to serve the files correctly (due to CORS/Module restrictions).
+
+**Using Python**:
+```bash
+# Run inside the project directory
+python3 -m http.server 8000
+# Visit http://localhost:8000
+```
+
+**Using Node.js**:
+```bash
+# Install http-server globally if needed
+npm install -g http-server
+# Run inside the project directory
+http-server .
+# Visit http://localhost:8080
+```
