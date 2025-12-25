@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Py5Script</title>
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/ide.css">
+    
+    <!-- Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.3/ace.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+    <header>
+        <h1>Py5Script</h1>
+        <div style="flex: 1;"></div> 
+        <!-- Controls -->
+        <button id="run-btn">▶ Run</button>
+        <button id="stop-btn">■ Stop</button>
+        <button id="save-btn">💾 Save</button>
+
+        <button id="load-btn">📂 Load</button>
+        <button id="share-btn">🔗 Share</button>
+        <button id="settings-btn" style="background: #555;">⚙️</button>
+        <input type="file" id="file-input" accept=".py,.zip">
+        <input type="file" id="upload-input">
+    </header>
+
+    <main>
+        <div id="file-panel">
+            <div id="file-list-header">
+                <span>FILES</span>
+                <button id="upload-file-btn" title="Upload File">⬆</button>
+                <button id="add-file-btn" title="New File">+</button>
+            </div>
+            <ul id="file-list"></ul>
+        </div>
+        
+        <div id="editor-container">
+            <div id="editor-top-bar">
+                <button id="toggle-sidebar-btn" title="Toggle File Panel">&gt;</button>
+                <span id="current-file-label">sketch.py</span>
+            </div>
+            <div id="editor"></div>
+            <div id="h-resizer"></div>
+            <div id="console-container">
+                <div id="console-header">
+                    <span>Console</span>
+                    <button id="clear-console" style="padding: 2px 6px; font-size: 10px; background: #666; color: white; border: 1px solid #777; cursor: pointer;">Clear</button>
+                </div>
+                <div id="console-content"></div>
+            </div>
+        </div>
+        <div id="v-resizer"></div>
+        <div id="preview-container">
+            <iframe id="runner-frame"></iframe>
+        </div>
+    </main>
+
+    <!-- Overlay for Modals -->
+    <div id="modal-overlay"></div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-dialog">
+         <h2 style="margin-top:0;">Settings</h2>
+         
+         <div style="margin-bottom: 10px;">
+             <label style="color:#eee; display:block; margin-bottom:5px;">Theme</label>
+             <select id="setting-theme" style="width:100%; padding:5px; background:#444; color:#fff; border:1px solid #555;">
+                 <option value="dark">Dark</option>
+                 <option value="light">Light</option>
+             </select>
+         </div>
+
+         <div style="margin-bottom: 10px;">
+             <label style="color:#eee; display:block; margin-bottom:5px;">Font Size (px)</label>
+             <input type="number" id="setting-fontsize" style="width:100%; padding:5px; background:#444; color:#fff; border:1px solid #555;" min="10" max="32">
+         </div>
+
+         <div style="margin-bottom: 10px;">
+             <label style="color:#eee; display:flex; align-items:center;">
+                 <input type="checkbox" id="setting-softtabs" style="margin-right:10px;"> Soft Tabs (Spaces)
+             </label>
+         </div>
+
+         <div style="margin-bottom: 15px;">
+             <label style="color:#eee; display:flex; align-items:center;">
+                 <input type="checkbox" id="setting-invisibles" style="margin-right:10px;"> Show Invisibles
+             </label>
+         </div>
+
+         <div style="text-align: right;">
+            <button id="close-settings-btn" style="background: #555;">Close</button>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script src="js/settings.js"></script>
+    <script src="js/project_manager.js"></script>
+    <script src="js/ide_ui.js"></script>
+</body>
+</html>
