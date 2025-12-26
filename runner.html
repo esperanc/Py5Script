@@ -71,7 +71,7 @@
                 self.scope_stack = []
 
                 # Explicitly exclude 'print' and other builtins/globals
-                # Explicitly exclude 'print' and other builtins/globals
+
                 exclusions = {'print', 'open', 'exit', 'quit', 'help', 'asset'}
                 self.p5_props -= exclusions
                 
@@ -243,8 +243,7 @@
             import builtins
             globals()['open'] = builtins.open
 
-            import os
-            print(f"DEBUG: VFS Files: {os.listdir('.')}")
+
 
             def sketch(p):
                 global p5
