@@ -291,7 +291,7 @@
                                 user_defined.add(target.id)
 
                 # 2. Transform AST
-                transformer = P5Transformer(p5, user_defined, case_mode)
+                transformer = P5Transformer(user_defined, case_mode)
                 new_tree = transformer.visit(tree)
                 ast.fix_missing_locations(new_tree)
 
