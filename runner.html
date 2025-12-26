@@ -63,8 +63,9 @@
         sys.stderr = StderrCatcher()
 
         class P5Transformer(ast.NodeTransformer):
-            def __init__(self, p5_instance, user_defined, case_mode='both'):
-                self.p5_props = set(dir(p5_instance))
+            def __init__(self, user_defined, case_mode='both'):
+                # Use prototype to get properties since instance isn't created yet
+                self.p5_props = set(dir(js.p5.prototype))
                 self.user_defined = user_defined
                 self.case_mode = case_mode
                 self.scope_stack = []
