@@ -71,18 +71,20 @@
                 self.scope_stack = []
 
                 # Explicitly exclude 'print' and other builtins/globals
+                # Explicitly exclude 'print' and other builtins/globals
                 exclusions = {'print', 'open', 'exit', 'quit', 'help', 'asset'}
                 self.p5_props -= exclusions
                 
                 self.p5_props.add('drawingContext')
-
+                
                 # Build Mapping: snake_case -> camelCase
                 # Only needed if case_mode is 'snake' or 'both'
                 self.snake_map = {}
                 if self.case_mode in ['snake', 'both']:
                     for prop in self.p5_props:
                         snake = self.camel_to_snake(prop)
-                        if snake != prop:
+                        # Ensure we don't map back to an excluded builtin (e.g. OPEN -> open)
+                        if snake != prop and snake not in exclusions:
                             self.snake_map[snake] = prop
 
             def camel_to_snake(self, name):
@@ -154,7 +156,9 @@
                 return node
 
             def visit_Call(self, node):
+                # We do generic_visit first to process arguments
                 self.generic_visit(node)
+                
                 if isinstance(node.func, ast.Name):
                     name = node.func.id
                     if name == 'print': return node
@@ -235,6 +239,12 @@
             
             # Expose to global scope for user scripts
             globals()['asset'] = asset
+            # Ensure open is builtins.open (defensive)
+            import builtins
+            globals()['open'] = builtins.open
+
+            import os
+            print(f"DEBUG: VFS Files: {os.listdir('.')}")
 
             def sketch(p):
                 global p5
