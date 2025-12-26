@@ -118,3 +118,35 @@ npm install -g http-server
 http-server .
 # Visit http://localhost:8080
 ```
+
+## Asset Management
+
+Py5Script handles assets (images, data files, fonts) by storing them in a virtual filesystem.
+
+### Using `asset()` helper
+When using p5.js load functions (like `p5.loadImage`, `p5.loadFont`), you should use the global `asset()` helper function to ensure the correct Data URL is passed to the browser.
+
+```python
+# GOOD: Explicitly resolve asset URL
+img = p5.loadImage(asset("logo.png"))
+
+# ALSO GOOD: Interceptors handle simple strings (but less robust)
+img = p5.loadImage("logo.png")
+```
+
+### Python File IO
+For standard Python file operations, simply use the filename. The `asset()` helper is **not** needed for `open()`.
+
+```python
+# Read a text file
+with open("data.txt", "r") as f:
+    content = f.read()
+```
+
+## Project Structure
+- **`sketch.py`**: The main entry point of your project. This file is always executed when you click "Run".
+- **Modules**: You can create additional `.py` files (e.g., `utils.py`) and import them in `sketch.py`. 
+    - *Note*: Clicking "Run" while viewing a module will save the module but execute `sketch.py`.
+
+## License
+MIT
