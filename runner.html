@@ -63,40 +63,120 @@
         sys.stderr = StderrCatcher()
 
         class P5Transformer(ast.NodeTransformer):
-            def __init__(self, p5_instance, user_defined):
+            def __init__(self, p5_instance, user_defined, case_mode='both'):
                 self.p5_props = set(dir(p5_instance))
                 self.user_defined = user_defined
-                # Explicitly exclude 'print' so it stays as python's print
+                self.case_mode = case_mode
+                self.scope_stack = []
+
+                # Explicitly exclude 'print'
                 if 'print' in self.p5_props:
                     self.p5_props.remove('print')
-                
-                # Explicitly add late-bound p5 properties
                 self.p5_props.add('drawingContext')
+
+                # Build Mapping: snake_case -> camelCase
+                # Only needed if case_mode is 'snake' or 'both'
+                self.snake_map = {}
+                if self.case_mode in ['snake', 'both']:
+                    for prop in self.p5_props:
+                        snake = self.camel_to_snake(prop)
+                        if snake != prop:
+                            self.snake_map[snake] = prop
+
+            def camel_to_snake(self, name):
+                import re
+                s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+                return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
+            def resolve_p5_name(self, name):
+                # 0. Check Scope Stack (Local shadowing)
+                for scope in self.scope_stack:
+                    if name in scope:
+                        return None
+                        
+                # 1. Check exact match (CamelCase)
+                if name in self.p5_props:
+                    if self.case_mode in ['camel', 'both']:
+                        return name
+                    if self.case_mode == 'snake':
+                        return None 
+
+                # 2. Check snake_case match
+                if name in self.snake_map:
+                    if self.case_mode in ['snake', 'both']:
+                        return self.snake_map[name]
+                
+                return None
+            
+            def analyze_scope(self, node):
+                """Collect local variables from a function body (args + assignments)"""
+                local_vars = set()
+                
+                # 1. Arguments
+                for arg in node.args.args:
+                    local_vars.add(arg.arg)
+                
+                # 2. Body assignments
+                for child in node.body:
+                    if isinstance(child, ast.Assign):
+                        for target in child.targets:
+                            if isinstance(target, ast.Name):
+                                local_vars.add(target.id)
+                            # Tuple unpacking? (a, b) = ...
+                            elif isinstance(target, ast.Tuple) or isinstance(target, ast.List):
+                                for elt in target.elts:
+                                    if isinstance(elt, ast.Name):
+                                        local_vars.add(elt.id)
+                    elif isinstance(child, ast.AnnAssign):
+                         if isinstance(child.target, ast.Name):
+                             local_vars.add(child.target.id)
+                    elif isinstance(child, ast.For):
+                        if isinstance(child.target, ast.Name):
+                            local_vars.add(child.target.id)
+                        elif isinstance(child.target, ast.Tuple):
+                            for elt in child.target.elts:
+                                if isinstance(elt, ast.Name):
+                                    local_vars.add(elt.id)
+                return local_vars
+
+            def visit_FunctionDef(self, node):
+                # Push new scope
+                local_names = self.analyze_scope(node)
+                self.scope_stack.append(local_names)
+                
+                # Visit children (body)
+                self.generic_visit(node)
+                
+                # Pop scope
+                self.scope_stack.pop()
+                return node
 
             def visit_Call(self, node):
                 self.generic_visit(node)
                 if isinstance(node.func, ast.Name):
                     name = node.func.id
-                    # Force skip 'print' to ensure it uses Python's print -> StdoutCatcher
-                    if name == 'print':
-                        return node
-                        
-                    if name in self.p5_props and name not in self.user_defined:
-                        node.func = ast.Attribute(
-                            value=ast.Name(id='p5', ctx=ast.Load()),
-                            attr=name,
-                            ctx=ast.Load()
-                        )
+                    if name == 'print': return node
+                    
+                    if name not in self.user_defined:
+                        target = self.resolve_p5_name(name)
+                        if target:
+                            node.func = ast.Attribute(
+                                value=ast.Name(id='p5', ctx=ast.Load()),
+                                attr=target,
+                                ctx=ast.Load()
+                            )
                 return node
 
             def visit_Name(self, node):
                 if isinstance(node.ctx, ast.Load):
-                    if node.id in self.p5_props and node.id not in self.user_defined:
-                         return ast.Attribute(
-                            value=ast.Name(id='p5', ctx=ast.Load()),
-                            attr=node.id,
-                            ctx=ast.Load()
-                        )
+                    if node.id not in self.user_defined:
+                         target = self.resolve_p5_name(node.id)
+                         if target:
+                            return ast.Attribute(
+                                value=ast.Name(id='p5', ctx=ast.Load()),
+                                attr=target,
+                                ctx=ast.Load()
+                            )
                 return node
 
         def entry_point():
@@ -162,9 +242,15 @@
                          original = getattr(p, name)
                          setattr(p, name, create_proxy(create_asset_loader(original, name)))
 
-                # 1. Get Code ...
+                # 1. Get Code & Params
                 raw_source = js.window.name
                 source = textwrap.dedent(raw_source)
+                
+                # Parse URL params for case-mode
+                params = js.URLSearchParams.new(js.window.location.search)
+                case_mode = params.get('case')
+                if not case_mode:
+                    case_mode = 'both'
                 
                 if not source.strip(): return
 
@@ -189,7 +275,7 @@
                                 user_defined.add(target.id)
 
                 # 2. Transform AST
-                transformer = P5Transformer(p5, user_defined)
+                transformer = P5Transformer(p5, user_defined, case_mode)
                 new_tree = transformer.visit(tree)
                 ast.fix_missing_locations(new_tree)
 
