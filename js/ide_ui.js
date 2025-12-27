@@ -15,6 +15,7 @@ const clearConsoleBtn = document.getElementById('clear-console');
 
 const runBtn = document.getElementById('run-btn');
 const stopBtn = document.getElementById('stop-btn');
+const newBtn = document.getElementById('new-btn');
 const loadBtn = document.getElementById('load-btn');
 const shareBtn = document.getElementById('share-btn');
 // Removed assetsBtn
@@ -33,6 +34,7 @@ applySettings();
 // Auto-save logic (Debounced)
 let autoSaveTimeout;
 editor.session.on('change', function(delta) {
+    isDirty = true; // Mark dirty immediately on edit
     if (autoSaveTimeout) clearTimeout(autoSaveTimeout);
     autoSaveTimeout = setTimeout(() => {
         // Prevent overwriting binary files with placeholder
@@ -128,6 +130,7 @@ function addFile() {
         return;
     }
     projectFiles[name] = "";
+    isDirty = true;
     switchToFile(name);
     saveProjectAndFiles();
 }
@@ -140,6 +143,7 @@ function deleteFile(filename) {
     if(!confirm(`Delete ${filename}?`)) return;
     
     delete projectFiles[filename];
+    isDirty = true;
 
     // Safety: Ensure sketch.py exists
     if (!projectFiles['sketch.py']) {
@@ -466,6 +470,8 @@ clearConsoleBtn.addEventListener('click', () => {
 const saveBtn = document.getElementById('save-btn');
 saveBtn.addEventListener('click', triggerExport);
 
+newBtn.addEventListener('click', newProject);
+
 loadBtn.addEventListener('click', () => {
     // Check dirty handled by click? No, input click opens dialog immediately.
     // We should check dirty BEFORE clicking input?
@@ -553,6 +559,7 @@ renameBtn.addEventListener('click', () => {
     const newName = prompt("Rename Project:", projectName);
     if (newName && newName.trim() !== "") {
         projectName = newName.trim();
+        isDirty = true;
         saveProjectAndFiles(); // Persist changes
     }
 });

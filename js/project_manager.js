@@ -8,7 +8,7 @@ const PROJECT_NAME_KEY = 'py5script_project_name';
 let projectFiles = { 'sketch.py': '' };
 let projectName = "My Project";
 let currentFile = 'sketch.py';
-let isDirty = false;
+let isDirty = localStorage.getItem('py5script_is_dirty') === 'true';
 
 
 
@@ -85,6 +85,7 @@ function saveProjectAndFiles() {
     
     // Save Project Name
     localStorage.setItem(PROJECT_NAME_KEY, projectName);
+    localStorage.setItem('py5script_is_dirty', isDirty);
     if (typeof updateProjectNameUI === 'function') updateProjectNameUI();
 }
 
@@ -228,6 +229,7 @@ function triggerExport() {
          URL.revokeObjectURL(a.href);
          
          isDirty = false; // Saved
+         saveProjectAndFiles(); // Persist clean state
      });
 }
 // --- URL LOADING ---
@@ -286,4 +288,26 @@ async function loadProjectFromURL(callbacks = {}) {
         if (callbacks.onLoaded) callbacks.onLoaded();
     }
     return loaded;
+}
+
+function newProject() {
+    if (!checkDirty()) return;
+
+    projectFiles = {
+        'sketch.py': "def setup():\n    p5.createCanvas(400, 400)\n\ndef draw():\n    p5.background(220)"
+    };
+    currentFile = 'sketch.py';
+    projectName = "My Project";
+    
+    // UI Updates
+    if (typeof editor !== 'undefined') {
+        editor.setValue(projectFiles['sketch.py']);
+        editor.clearSelection();
+        editor.setReadOnly(false);
+    }
+    if (typeof updateFileList === 'function') updateFileList();
+    if (typeof updateProjectNameUI === 'function') updateProjectNameUI();
+    
+    isDirty = false; // Reset to clean state
+    saveProjectAndFiles();
 }
