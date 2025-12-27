@@ -53,6 +53,9 @@
         
         class StderrCatcher:
             def write(self, text):
+                # Avoid Duplicate SyntaxError messages (handled explicitly by sketch logic)
+                if text.strip().startswith('SyntaxError:'):
+                    return
                 msg = {"type": "error", "message": text}
                 js.window.parent.postMessage(to_js(msg, dict_converter=js.Object.fromEntries), "*")
             def flush(self):
