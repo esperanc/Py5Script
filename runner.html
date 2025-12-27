@@ -223,6 +223,9 @@
                     except Exception as e:
                         # Report SyntaxError in module
                         err_msg = f"{e.__class__.__name__}: {e}"
+                        if isinstance(e, SyntaxError):
+                            err_msg = f"{e.__class__.__name__}: {e.msg}"
+                        
                         line_num = getattr(e, 'lineno', 0)
                         msg = {"type": "error", "message": err_msg, "filename": module.__file__, "line": line_num}
                         js.window.parent.postMessage(to_js(msg, dict_converter=js.Object.fromEntries), "*")
@@ -361,6 +364,9 @@
                 except Exception as e:
                     # Captura erro de sintaxe
                     err_msg = f"{e.__class__.__name__}: {e}"
+                    if isinstance(e, SyntaxError):
+                        err_msg = f"{e.__class__.__name__}: {e.msg}"
+                    
                     line_num = getattr(e, 'lineno', 0)
                     msg = {"type": "error", "message": err_msg, "filename": "sketch.py", "line": line_num}
                     js.window.parent.postMessage(to_js(msg, dict_converter=js.Object.fromEntries), "*")
@@ -399,6 +405,7 @@
                     err_filename = "sketch.py"
 
                     if isinstance(e, SyntaxError):
+                         err_msg = f"{e.__class__.__name__}: {e.msg}"
                          line_num = e.lineno
                          err_filename = e.filename
                     else:
