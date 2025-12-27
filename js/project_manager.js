@@ -290,11 +290,22 @@ async function loadProjectFromURL(callbacks = {}) {
     return loaded;
 }
 
-function newProject() {
+async function newProject() {
     if (!checkDirty()) return;
 
+    let defaultSketch = "def setup():\n    p5.createCanvas(400, 400)\n\ndef draw():\n    p5.background(220)";
+    
+    try {
+        const response = await fetch('sketch.py');
+        if (response.ok) {
+            defaultSketch = await response.text();
+        }
+    } catch (e) {
+        console.warn("Failed to fetch default sketch.py, using fallback.");
+    }
+
     projectFiles = {
-        'sketch.py': "def setup():\n    p5.createCanvas(400, 400)\n\ndef draw():\n    p5.background(220)"
+        'sketch.py': defaultSketch
     };
     currentFile = 'sketch.py';
     projectName = "My Project";
