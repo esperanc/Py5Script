@@ -48,8 +48,10 @@
         import base64
         from pyodide.ffi import create_proxy, to_js
 
-        # Global p5 instance
-        p5 = None
+        # Global P5 instance
+        P5 = None
+        # Expose global p5 class
+        p5 = js.p5
 
         class StdoutCatcher:
             def write(self, text):
@@ -177,7 +179,7 @@
                         target = self.resolve_p5_name(name)
                         if target:
                             node.func = ast.Attribute(
-                                value=ast.Name(id='p5', ctx=ast.Load()),
+                                value=ast.Name(id='P5', ctx=ast.Load()),
                                 attr=target,
                                 ctx=ast.Load()
                             )
@@ -189,7 +191,7 @@
                          target = self.resolve_p5_name(node.id)
                          if target:
                             return ast.Attribute(
-                                value=ast.Name(id='p5', ctx=ast.Load()),
+                                value=ast.Name(id='P5', ctx=ast.Load()),
                                 attr=target,
                                 ctx=ast.Load()
                             )
@@ -337,11 +339,12 @@
 
 
             def sketch(p):
-                global p5
-                p5 = p
-                # Inject p5 into builtins so imported modules can access it as 'p5'
+                global P5
+                P5 = p
+                # Inject P5 into builtins so imported modules can access it as 'P5'
                 import builtins
-                builtins.p5 = p  
+                builtins.P5 = p
+                builtins.p5 = js.p5 # Global p5 class available everywhere  
                 
                 # Intercept load functions to use Data URLs if available
                 # This fixes p5.loadImage() failing to fetch local files
