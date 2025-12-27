@@ -324,6 +324,7 @@ async function initializeIDE() {
             
             updateFileList(); // Refresh UI list
             switchToFile(currentFile, false); // Load content
+            return; // STOP here if loaded successfully
             
         } catch (e) {
             console.error("Failed to parse project:", e);
