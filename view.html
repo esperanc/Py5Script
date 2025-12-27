@@ -146,7 +146,17 @@
              
              if(code) {
                  iframe.contentWindow.name = code;
-                 iframe.src = 'runner.html?t=' + Date.now();
+                 
+                 // Pass 'case' parameter if present
+                 const params = new URLSearchParams(window.location.search);
+                 const caseParam = params.get('case');
+                 
+                 let runnerUrl = 'runner.html?t=' + Date.now();
+                 if (caseParam) {
+                     runnerUrl += '&case=' + caseParam;
+                 }
+                 
+                 iframe.src = runnerUrl;
              }
         }
 
