@@ -9,7 +9,10 @@ The IDE provides a clean interface for coding, managing files, and running sketc
 ### Toolbar Controls
 - **▶ Run**: Executes the current sketch in the preview panel.
 - **■ Stop**: Stops the running sketch and resets the preview.
-- **💾 Save**: Downloads your entire project (all scripts and assets) as `project.zip` and marks changes as saved.
+- **💾 Save**: Saves the project.
+    - **Single File (`.py`)**: If your project contains only `sketch.py`, it downloads as `[ProjectName].py`.
+    - **Full Project (`.zip`)**: If you have multiple files or assets, it downloads `[ProjectName].zip`.
+    - Note that this will mark changes as saved.
 - **📂 Load**: Opens a file picker to load a `project.zip` or a single `.py` file.
     > **Warning**: Loading a project will **replace** your current workspace. Any unsaved changes will be lost.
 - **🔗 Share**: Generates a shareable URL containing your code (compressed) to send to others. Note that this will **_not_** include assets or other python files.
@@ -29,11 +32,14 @@ The sidebar on the left displays all files in your project (Python scripts, imag
 This IDE simplifies writing p5.js sketches in Python by abstracting away the global vs. instance mode distinction.
 
 1.  **P5 Instance**: When you run a sketch, the system instantiates p5.js in "instance mode".
-2.  **AST Analysis**: Before execution, your Python code is analyzed using Python's `ast` (Abstract Syntax Tree) module.
-3.  **Auto-Prefixing**: The analyzer identifies calls to p5 functions (like `rect`, `fill`, `stroke`)  and variables (like `width`, `height`, `mouseX`, `mouseY`). It compares them against the properties of the p5 instance.
-    - If a name matches a p5 property and is **not** defined by you (the user) in the script, it automatically prefixes it with `p5.`.
-    - Example: `rect(10, 10, 50, 50)` becomes `p5.rect(10, 10, 50, 50)` internally.
+2.  **Instance Naming**: The instance is named `P5` (uppercase) to avoid conflicting with the global `p5` object.
+3.  **Global p5**: The standard `p5` object (lowercase) represents the library itself, used for accessing static classes and constants (e.g., `p5.Vector`, `p5.Image`, `p5.TWO_PI`).
+4.  **AST Analysis**: Before execution, your Python code is analyzed using Python's `ast` (Abstract Syntax Tree) module.
+5.  **Auto-Prefixing**: The analyzer identifies calls to p5 functions (like `rect`, `fill`, `background`) and variables (like `width`, `height`, `mouseX`, `mouseY`). It compares them against the properties of the p5 instance.
+    - If a name matches a p5 property and is **not** defined by you (the user) in the script, it automatically prefixes it with `P5.`.
+    - Example: `rect(10, 10, 50, 50)` becomes `P5.rect(10, 10, 50, 50)` internally.
     - Example: `print("Hello")` remains `print("Hello")` (uses Python's standard print).
+6.  **Explicit Access**: You can use `P5.background(0)` for instance methods and `p5.Vector(0,0)` for static classes.
 
 ### Snake Case Support
 You can optionally write p5.js code using `snake_case` (as recommended by [PEP8](https://peps.python.org/pep-0008/)), and the IDE will automatically convert it internally to `camelCase` (p5.js style).
@@ -44,7 +50,7 @@ You can optionally write p5.js code using `snake_case` (as recommended by [PEP8]
 
 ### Limitations
 - **Eval/Dynamic Access**: The auto-prefixing is a **static analysis**. It cannot detect usage inside `eval()` strings or dynamic attribute access. 
-    - *Workaround*: You can always manually verify the prefix yourself. Passing `p5` explicitly or using `p5.func()` is always valid.
+    - *Workaround*: You can always manually verify the prefix yourself. Passing `P5` explicitly or using `P5.func()` is always valid.
 - **Variable Shadowing**: If you define a variable with the same name as a p5 function (e.g. `def rect(): ...`), the auto-prefixer will respect your definition and will **not** prefix usages of `rect`.
 
 ### Unified Storage & Projects
@@ -129,10 +135,10 @@ When using p5.js load functions (like `p5.loadImage`, `p5.loadFont`), you should
 
 ```python
 # GOOD: Explicitly resolve asset URL
-img = p5.loadImage(asset("logo.png"))
+img = P5.loadImage(asset("logo.png"))
 
 # ALSO GOOD: Interceptors handle simple strings (but less robust)
-img = p5.loadImage("logo.png")
+img = P5.loadImage("logo.png")
 ```
 
 ### Python File IO
@@ -148,7 +154,9 @@ with open("data.txt", "r") as f:
 - **`sketch.py`**: The main entry point. This file undergoes "p5 magic" (auto-prefixing, snake_case support).
 - **Modules**: You can create additional `.py` files import them.
     - **Usage**: Modules now behave just like `sketch.py`. You can use p5 functions directly (e.g., `rect()`) and use snake_case (e.g., `mouse_pressed`).
-    - **Global p5**: The `p5` object is available globally if you prefer explicit access (`p5.rect()`).
+    - **Global p5 & P5**: 
+        - The `p5` object is available globally for static classes (`p5.Vector`).
+        - The `P5` instance is available globally for drawing commands (`P5.rect()`).
     - *Note*: Clicking "Run" works from any file but always executes `sketch.py`.
 
 ## License
