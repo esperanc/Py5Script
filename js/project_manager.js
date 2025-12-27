@@ -199,12 +199,31 @@ async function loadProjectFromBlob(blob, filenameHint, callbacks = {}) {
 
 // --- EXPORT ---
 function triggerExport() {
-     const zip = new JSZip();
-     
-     // Sync editor
+     // Sync editor content first
      if (typeof editor !== 'undefined' && editor.getValue && !isBinary(projectFiles[currentFile])) {
         projectFiles[currentFile] = editor.getValue();
      }
+
+     const fileKeys = Object.keys(projectFiles);
+
+     // Single File Export (.py)
+     if (fileKeys.length === 1 && fileKeys[0] === 'sketch.py') {
+         const content = projectFiles['sketch.py'];
+         const blob = new Blob([content], {type: "text/plain;charset=utf-8"});
+         
+         const a = document.createElement("a");
+         a.href = URL.createObjectURL(blob);
+         a.download = `${projectName}.py`;
+         a.click();
+         URL.revokeObjectURL(a.href);
+         
+         isDirty = false;
+         saveProjectAndFiles();
+         return;
+     }
+
+     // ZIP Export (Multiple files or non-sketch files)
+     const zip = new JSZip();
 
      // Add All Project Files
      for (const filename in projectFiles) {
