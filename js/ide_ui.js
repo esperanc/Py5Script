@@ -158,13 +158,26 @@ addFileBtn.addEventListener('click', addFile);
 uploadInput.addEventListener('change', handleFileUpload);
 
 // --- RUNNER LOGIC ---
-function logToConsole(msg, type) {
+function logToConsole(msg, type, filename, line) {
     const el = document.createElement('span');
     el.textContent = msg;
     el.className = type === 'error' ? 'log-error' : 'log-print';
-    el.style.borderBottom = "1px solid #333"; 
+    
+    if (type === 'error') {
+        el.style.display = 'block';
+        el.style.borderBottom = "1px solid #333";
+        
+        if (filename) {
+             const loc = document.createElement('span');
+             loc.style.opacity = "0.8";
+             loc.style.fontSize = "0.9em";
+             loc.style.marginLeft = "8px";
+             loc.textContent = `— ${filename}:${line}`;
+             el.appendChild(loc);
+        }
+    }
+
     el.style.wordWrap = "break-word";
-    if (type === 'error') el.style.display = 'block';
 
     consoleContent.appendChild(el);
     consoleContent.scrollTop = consoleContent.scrollHeight;
@@ -300,19 +313,21 @@ async function initializeIDE() {
     if (savedProject) {
         try {
             projectFiles = JSON.parse(savedProject);
-            // Ensure currentFile is valid
-            if (!projectFiles[currentFile]) {
-                currentFile = Object.keys(projectFiles)[0] || 'sketch.py';
+            // Ensure sketch.py exists
+            if (!projectFiles['sketch.py']) {
+                projectFiles['sketch.py'] = "";
             }
+            // Ensure valid currentFile
             if (!projectFiles[currentFile]) {
-                projectFiles[currentFile] = "def setup():\n    pass";
+                currentFile = 'sketch.py';
             }
-
-            editor.setValue(projectFiles[currentFile]);
-            updateFileList();
-            return;
-        } catch(e) {
-            console.error("Failed to parse saved project", e);
+            
+            updateFileList(); // Refresh UI list
+            switchToFile(currentFile, false); // Load content
+            
+        } catch (e) {
+            console.error("Failed to parse project:", e);
+            // Fallback
         }
     }
     
@@ -345,6 +360,82 @@ async function initializeIDE() {
     editor.clearSelection();
 }
 
+
+// --- GLOBAL EVENT LISTENERS ---
+// Editor Change: Handled in editor setup above
+// File List Click: Handled in updateFileList
+
+// Editor Save Command (Cmd+S / Ctrl+S)
+editor.commands.addCommand({
+    name: 'save',
+    bindKey: {win: 'Ctrl-S', mac: 'Command-S'},
+    exec: function(editor) {
+        // Force save immediately
+        if (projectFiles[currentFile] && isBinary(projectFiles[currentFile])) return;
+        projectFiles[currentFile] = editor.getValue();
+        saveProjectAndFiles();
+        
+        // Visual feedback?
+        const status = document.createElement('div');
+        status.textContent = "Saved!";
+        status.style.position = 'absolute';
+        status.style.bottom = '10px';
+        status.style.right = '10px';
+        status.style.background = '#28a745';
+        status.style.color = 'white';
+        status.style.padding = '5px 10px';
+        status.style.borderRadius = '3px';
+        status.style.zIndex = '1000';
+        document.body.appendChild(status);
+        setTimeout(() => status.remove(), 1000);
+    }
+});
+
+
+// Rename File logic (Double click file item?)
+// Not implemented yet. Can be added later.
+
+
+// Close Modal when clicking outside
+window.onclick = function(event) {
+    if (event.target == document.getElementById('settings-modal')) {
+        closeSettings();
+    }
+}
+
+// Remove previously attached listeners to avoid dupes?
+// This script is loaded once, so fine.
+
+// Run Sketch on Load?
+// No, user should click Run.
+
+
+// --- DEPRECATED ASSETS MODAL LOGIC (Removed) ---
+// ...
+
+
+// --- FINALIZE ---
+// Make functions global if needed (for HTML onclicks)
+window.switchToFile = switchToFile;
+window.deleteFile = deleteFile;
+
+
+// File Upload Helpers
+function isBinary(content) {
+    return content && content.startsWith("data:");
+}
+
+
+// --- IFRAME MESSAGING ---
+window.addEventListener('message', (event) => {
+     const data = event.data;
+     if (data && data.type === 'print') {
+         logToConsole(data.message, 'print');
+     } else if (data && data.type === 'error') {
+         // Extract filename and line if available
+         logToConsole(data.message, 'error', data.filename, data.line);
+     }
+});
 // BIND EVENTS
 runBtn.addEventListener('click', runSketch);
 stopBtn.addEventListener('click', stopSketch);
