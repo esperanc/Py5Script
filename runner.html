@@ -345,6 +345,11 @@
                                 # Regular Text File (Module)
                                 with open(filename, 'w') as f:
                                     f.write(content)
+                                
+                                # Register as Data URL for p5 interceptors (loadStrings, loadShader)
+                                # We treat all text-based assets as text/plain here for simplicity
+                                b64_text = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+                                hydrated_assets[filename] = f"data:text/plain;base64,{b64_text}"
                         except Exception as inner_e:
                             # print(f"Error hydrating {filename}: {inner_e}")
                             pass
