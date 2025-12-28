@@ -39,6 +39,42 @@
             const msg = { type: 'error', message: "Unhandled Rejection: " + message };
             window.parent.postMessage(msg, '*');
         });
+
+        // Intercept console.error (used by p5.js for shader/internal errors)
+        (function() {
+            const originalError = console.error;
+            console.error = function(...args) {
+                originalError.apply(console, args);
+                
+                // Convert args to string message
+                const message = args.map(arg => String(arg)).join(' ');
+                
+                // Post to IDE
+                window.parent.postMessage({ type: 'error', message: message }, '*');
+
+                // Stop Sketch if it's running (prevents infinite error loops)
+                // We access the global P5 instance from the Python side if possible, 
+                // but simpler to check the global variable directly if exposed to JS or just known.
+                // Logic: "P5" is defined in Python `globals()`, not necessarily window.
+                // BUT, we can try to stop p5 via the instance assigned to window.p5 if we can reach it.
+                // Actually, the instance is inside `sketch` function scope. 
+                // However, `P5` is global in Python. 
+                // Let's use a try-catch to call back into Python? Or just accept that `noLoop` might be hard to reach from here?
+                // Wait, we can't easily reach Python state from this JS block.
+                // BUT we can check `window.p5` which is the constructor. The instance?
+                // We don't have a global reference to the p5 instance in JS scope (it's in Python).
+                
+                // Workaround: We can post a message that *Python* listens to? No.
+                // We can't easily stop it from here unless we exposed the instance to window.
+                // Let's rely on the user manually stopping?
+                // NO, user requested "stop the execution".
+                
+                // Solution: In `sketch()` function (Python), we set `js.window.currentP5 = p`.
+                if (window.currentP5) {
+                    try { window.currentP5.noLoop(); } catch(e){}
+                }
+            };
+        })();
     </script>
     <script type="py">
         import js
@@ -379,6 +415,9 @@
             def sketch(p):
                 global P5
                 P5 = p
+                # Expose to JS for console.error interception
+                js.window.currentP5 = p
+                
                 # Inject P5 into builtins so imported modules can access it as 'P5'
                 import builtins
                 builtins.P5 = p
