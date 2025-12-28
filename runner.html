@@ -125,34 +125,66 @@
                 return None
             
             def analyze_scope(self, node):
-                """Collect local variables from a function body (args + assignments)"""
+                """Collect local variables from a function body (args + assignments), recursively."""
                 local_vars = set()
                 
-                # 1. Arguments
+                # 1. Arguments are always local
                 for arg in node.args.args:
                     local_vars.add(arg.arg)
                 
-                # 2. Body assignments
-                for child in node.body:
-                    if isinstance(child, ast.Assign):
-                        for target in child.targets:
-                            if isinstance(target, ast.Name):
-                                local_vars.add(target.id)
-                            # Tuple unpacking? (a, b) = ...
-                            elif isinstance(target, ast.Tuple) or isinstance(target, ast.List):
-                                for elt in target.elts:
-                                    if isinstance(elt, ast.Name):
-                                        local_vars.add(elt.id)
-                    elif isinstance(child, ast.AnnAssign):
-                         if isinstance(child.target, ast.Name):
-                             local_vars.add(child.target.id)
-                    elif isinstance(child, ast.For):
-                        if isinstance(child.target, ast.Name):
-                            local_vars.add(child.target.id)
-                        elif isinstance(child.target, ast.Tuple):
-                            for elt in child.target.elts:
-                                if isinstance(elt, ast.Name):
-                                    local_vars.add(elt.id)
+                # 2. Recursive traversal for assignments
+                # We do NOT use generic_visit/NodeVisitor because we need manual control 
+                # to STOP at nested scopes (FunctionDef, ClassDef, Lambda).
+                
+                def visit_node_scope(n):
+                    if isinstance(n, ast.Assign):
+                        for target in n.targets:
+                            add_target(target)
+                    elif isinstance(n, ast.AnnAssign):
+                         add_target(n.target)
+                    elif isinstance(n, ast.For) or isinstance(n, ast.AsyncFor):
+                        add_target(n.target)
+                        for item in n.body: visit_node_scope(item)
+                        for item in n.orelse: visit_node_scope(item)
+                    elif isinstance(n, ast.With) or isinstance(n, ast.AsyncWith):
+                        for item in n.items:
+                            if item.optional_vars:
+                                add_target(item.optional_vars)
+                        for item in n.body: visit_node_scope(item)
+                    elif isinstance(n, ast.NamedExpr): # walrus operator (a := 1)
+                        add_target(n.target)
+                    
+                    # Control Flow - Recurse but don't add vars directly
+                    elif isinstance(n, (ast.If, ast.While, ast.Try)):
+                        for child in ast.iter_fields(n):
+                            if isinstance(child, list):
+                                for item in child:
+                                    if isinstance(item, ast.AST):
+                                        visit_node_scope(item)
+                            elif isinstance(child, ast.AST):
+                                visit_node_scope(child)
+                    
+                    # Scopes - STOP recursion. 
+                    # Nested functions/classes create their own scope, so their locals aren't ours.
+                    elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+                        return 
+
+                    # Statements - Recurse into lists of statements (like module body or if body)
+                    elif hasattr(n, 'body') and isinstance(n.body, list):
+                         for item in n.body:
+                             visit_node_scope(item)
+
+                def add_target(target):
+                    if isinstance(target, ast.Name):
+                        local_vars.add(target.id)
+                    elif isinstance(target, (ast.Tuple, ast.List)):
+                        for elt in target.elts:
+                            add_target(elt)
+                
+                # Start traversal from function body
+                for item in node.body:
+                    visit_node_scope(item)
+                    
                 return local_vars
 
             def visit_FunctionDef(self, node):
