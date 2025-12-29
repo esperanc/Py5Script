@@ -566,9 +566,7 @@ window.updateProjectNameUI = updateProjectNameUI; // Expose to project_manager.j
 renameBtn.addEventListener('click', () => {
     const newName = prompt("Rename Project:", projectName);
     if (newName && newName.trim() !== "") {
-        projectName = newName.trim();
-        isDirty = true;
-        saveProjectAndFiles(); // Persist changes
+        renameProject(newName.trim());
     }
 });
 

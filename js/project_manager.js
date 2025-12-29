@@ -141,6 +141,64 @@ function saveProjectAndFiles() {
     if (typeof updateProjectNameUI === 'function') updateProjectNameUI();
 }
 
+// Rename Project and Migrate ID
+function renameProject(newName) {
+    if (!newName || !newName.trim()) return;
+    
+    // Slugify helper
+    const slugify = (text) => text.toString().toLowerCase()
+        .replace(/\s+/g, '-')           
+        .replace(/[^\w\-]+/g, '')       
+        .replace(/\-\-+/g, '-')         
+        .replace(/^-+/, '')             
+        .replace(/-+$/, '');
+        
+    const newId = slugify(newName);
+    
+    if (!newId) {
+        alert("Invalid project name.");
+        return;
+    }
+    
+    // Case only change?
+    if (newId === projectId) {
+        projectName = newName;
+        isDirty = true;
+        saveProjectAndFiles();
+        return;
+    }
+    
+    // Check Collision
+    const registry = getProjectRegistry();
+    if (registry[newId]) {
+        alert(`Project "${newName}" (ID: ${newId}) already exists. Please choose another name.`);
+        return;
+    }
+    
+    if (!confirm(`This will rename the project ID to "${newId}" and reload. Continue?`)) return;
+    
+    // MIGRATE DATA
+    // We already have 'projectFiles', 'isDirty' in memory.
+    // Just save to NEW keys and delete OLD keys.
+    
+    // 1. Save to New ID
+    const oldId = projectId;
+    const keyFilesNew = `${PROJECT_KEY_PREFIX}${newId}_files`;
+    const keyNameNew = `${PROJECT_KEY_PREFIX}${newId}_name`;
+    const keyDirtyNew = `${PROJECT_KEY_PREFIX}${newId}_dirty`;
+
+    localStorage.setItem(keyFilesNew, JSON.stringify(projectFiles));
+    localStorage.setItem(keyNameNew, newName);
+    localStorage.setItem(keyDirtyNew, isDirty);
+    
+    // 2. Update Registry (Add New, Delete Old)
+    updateRegistryEntry(newId, newName);
+    deleteProjectFromRegistry(oldId);
+    
+    // 3. Redirect
+    window.location.href = `ide.html?id=${newId}`;
+}
+
 // Check Dirty before action
 function checkDirty() {
     if (isDirty) {
