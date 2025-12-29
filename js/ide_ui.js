@@ -233,6 +233,10 @@ function runSketch() {
     if (caseParam) {
         runnerUrl += '&case=' + caseParam;
     }
+    // Pass Project ID so runner knows where to load assets from
+    if (projectId) {
+        runnerUrl += '&id=' + projectId;
+    }
     
     iframe.src = runnerUrl;
 }

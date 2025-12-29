@@ -355,10 +355,20 @@
             sys.meta_path.insert(0, P5Importer(case_mode))
 
             # --- Unified Project Hydration ---
-            # All files (code + assets) are in 'py5script_project'
+            # Parse Project ID from runner URL
+            params = js.URLSearchParams.new(js.window.location.search)
+            project_id = params.get('id')
+            
             hydrated_assets = {}
             try:
-                project_json = js.localStorage.getItem('py5script_project')
+                project_json = None
+                if project_id:
+                     # New Scoped System
+                     project_json = js.localStorage.getItem(f"project_{project_id}_files")
+                else:
+                     # Fallback to Legacy (shouldn't happen often)
+                     project_json = js.localStorage.getItem('py5script_project')
+
                 if project_json:
                     project_files = json.loads(project_json)
                     for filename, content in project_files.items():
