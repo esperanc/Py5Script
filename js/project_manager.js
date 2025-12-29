@@ -616,9 +616,24 @@ async function initProjectID() {
             return false; // Stop loading
         } else {
             // NEW FRESH PROJECT
-            const newName = generateProjectName();
-            // Redirect
-            window.location.href = `ide.html?id=${newName}`;
+            let newId;
+
+            // Check if we have a 'sketch' parameter to derive ID from
+            const sketchParam = params.get('sketch');
+            if (sketchParam) {
+                // Extract filename without extension and directories
+                // e.g., "demo/webGLDemo.py" -> "webGLDemo"
+                const parts = sketchParam.split('/');
+                const filename = parts[parts.length - 1];
+                const basename = filename.split('.')[0];
+                newId = basename; // Use sketch name as ID
+            } else {
+                newId = generateProjectName();
+            }
+
+            // Redirect preserving other parameters
+            params.set('id', newId);
+            window.location.search = params.toString();
             return false;
         }
     }
