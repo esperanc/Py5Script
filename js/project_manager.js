@@ -277,7 +277,8 @@ async function loadProjectFromBlob(blob, filenameHint, callbacks = {}) {
              }
 
          } catch(e) {
-             err(`Error reading ZIP: ${e}`);
+             console.error("ZIP Import Error:", e);
+             alert(`Error reading ZIP file: ${e.message}`);
              return;
          }
      } else {
@@ -295,6 +296,7 @@ async function loadProjectFromBlob(blob, filenameHint, callbacks = {}) {
          } else {
             newProjectName = "My Sketch";
          }
+         console.log("Importing Text Project:", newProjectName, "from", filenameHint);
      }
 
      // --- SAVE AS NEW PROJECT ---

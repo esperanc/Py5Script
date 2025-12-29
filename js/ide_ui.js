@@ -18,7 +18,12 @@ const stopBtn = document.getElementById('stop-btn');
 const newBtn = document.getElementById('new-btn');
 const openBtn = document.getElementById('open-btn');
 const loadBtn = document.getElementById('load-btn'); // Now "Upload"
-const saveBtn = document.getElementById('save-btn'); // Now "Download"
+const downloadBtn = document.getElementById('download-btn'); // Was "save-btn" (Download)
+const saveBtn = document.getElementById('save-btn'); // Removed from HTML (Save) but might still be used for shortcut? 
+// Actually I removed the Save button from HTML, but we kept the shortcut (Cmd+S).
+// We should probably keep 'saveBtn' variable if we want to bind shortcut visual feedback or something, 
+// but since I removed the element, `document.getElementById('save-btn')` will be null.
+// Let's remove saveBtn variable and only use downloadBtn.
 const shareBtn = document.getElementById('share-btn');
 // Removed assetsBtn
 const fileInput = document.getElementById('file-input');
@@ -477,8 +482,10 @@ clearConsoleBtn.addEventListener('click', () => {
 // User said: "load button will necessarily erase all files... If any file was changed after the last 'Save'".
 // This implies the 'Save' button is the way to 'Persist' state as a Zip.
 // So yes, Save Button -> triggerExport()
-// Reusing saveBtn defined at top for Download
-saveBtn.addEventListener('click', triggerExport);
+// Bind Export (Download)
+if (downloadBtn) {
+    downloadBtn.addEventListener('click', triggerExport);
+}
 
 newBtn.addEventListener('click', newProject);
 
