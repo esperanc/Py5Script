@@ -129,7 +129,9 @@
                 # 'label' is often leaked from p5.prototype (as part of internal DOM attributes?) causing confusion.
                 exclusions = {
                     'print', 'open', 'exit', 'quit', 'help', 'asset', 'label',
-                    'map', 'set', 'filter', 'min', 'max', 'abs', 'round', 'pow', 'sum'
+                    'map', 'set', 'filter', 'min', 'max', 'abs', 'round', 'pow', 'sum',
+                    'random', 'shuffle', 'sort', 'reverse', 'append', 'splice', 'subset', 
+                    'join', 'split', 'shorten', 'concat'
                 }
                 self.p5_props -= exclusions
                 
