@@ -59,6 +59,62 @@ You can optionally write p5.js code using `snake_case`. The IDE automatically co
 - `create_canvas(400, 400)` -> `P5.createCanvas(400, 400)`
 - `def mouse_pressed():` -> registers `mousePressed`
 
+### Python & JavaScript Interoperability
+
+Since Py5Script runs Python (via Pyodide) alongside p5.js (JavaScript), there are some important considerations when passing data between them.
+
+#### 1. Naming Collisions (Random & Logic)
+Some p5.js functions conflict with Python standard libraries or built-ins. To avoid issues, these have been excluded from auto-prefixing, meaning you must access them explicitly via the `P5` instance if you want the p5 version.
+
+*   **`random` vs `P5.random`**:
+    *   `import random`: Use Python's standard `random` module for logic.
+    *   `P5.random(0, 255)`: Use p5's random for visual noise or drawing.
+*   **`map`, `set`, `min`, `max`**: These default to Python's built-in versions. Use `P5.map(...)` for the p5 range mapping function.
+
+#### 2. Data Structures (Lists vs Arrays)
+Avoid passing Python lists directly to p5 functions that expect to modify them in-place, such as `P5.shuffle()`.
+
+*   **Bad**: `P5.shuffle(my_python_list)` (May cause errors or return wrapped proxies).
+*   **Good**: use `random.shuffle(my_python_list)` (Native Python).
+*   **Good**: If you *must* pass a list to a JS library, convert it:
+    ```python
+    from pyodide.ffi import to_js
+    js_array = to_js(my_python_list)
+    P5.someFunc(js_array)
+    ```
+
+#### 3. Numpy & Types
+Numpy scalars (e.g. `np.float64`) are passed as temporary proxies to JavaScript. If p5 stores these (like `vertex()` does before `end_shape()`), the proxy might be destroyed before p5 uses it, causing a `borrowed proxy was automatically destroyed` error.
+
+*   **Fix**: Cast to native Python types before passing to p5.
+    ```python
+    # Ensure values are simple floats/ints/lists
+    for x, y, z in my_numpy_array.tolist():
+        vertex(x, y, z)
+    ```
+
+#### 4. Callbacks & Proxies
+When using p5 functions that expect a callback (like DOM interactions), you must wrap your Python function in a `create_proxy` to keep it alive in the JavaScript scope.
+
+```python
+# Example: DOM Checkbox
+from pyodide.ffi import create_proxy
+
+def toggle_drawing(event):
+    global is_drawing
+    is_drawing = checkbox.checked()
+
+def setup():
+    global checkbox
+    checkbox = createCheckbox(' Draw Circle', True)
+    
+    # Create a proxy for the callback
+    proxy = create_proxy(toggle_drawing)
+    
+    # Attach it to the p5 element
+    checkbox.changed(proxy)
+```
+
 
 ### Modes: IDE vs Viewer
 1.  **IDE Mode (`ide.html`)**: The full integrated development environment.
