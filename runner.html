@@ -407,7 +407,21 @@
             # --- Package Installation (requirements.txt) ---
             if os.path.exists("requirements.txt"):
                 try:
-                    import micropip
+                    # Ensure micropip is available
+                    try:
+                        import micropip
+                    except ImportError:
+                        # Attempt to load micropip via Pyodide JS API
+                        # This works if pyodide is exposed on window or accessible via js
+                        # PyScript usually exposes it or we are inside it.
+                        try:
+                            await js.pyodide.loadPackage("micropip")
+                            import micropip
+                        except Exception as e:
+                             print(f"Error loading micropip: {e}")
+                             # Last ditch: maybe it is 'micropip' package string?
+                             raise e
+
                     with open("requirements.txt", "r") as f:
                         packages = [line.strip() for line in f if line.strip() and not line.startswith('#')]
                     
