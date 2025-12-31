@@ -108,45 +108,67 @@ function updateFileList() {
     }
 }
 
+const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'];
+
 function switchToFile(filename, saveCurrent = true) {
-    // Save current content first if it was text
-    if (saveCurrent && projectFiles[currentFile] !== undefined && !isBinary(projectFiles[currentFile])) {
+    // Save current content first if it was text (and not currently viewing an image)
+    const currentExt = currentFile ? currentFile.split('.').pop().toLowerCase() : '';
+    const isCurrentImage = imageExts.includes(currentExt);
+
+    if (saveCurrent && projectFiles[currentFile] !== undefined && !isBinary(projectFiles[currentFile]) && !isCurrentImage) {
         projectFiles[currentFile] = editor.getValue();
     }
 
     currentFile = filename;
-    
+    const ext = filename.split('.').pop().toLowerCase();
     const content = projectFiles[currentFile];
-    if (isBinary(content)) {
-        // Show placeholder or read-only
-        editor.setValue(`<< Binary File: ${filename} >>\n<< Content hidden >>`);
-        editor.setReadOnly(true);
-        editor.session.setMode("ace/mode/text");
-    } else {
-        isProgrammaticChange = true;
-        editor.setValue(content || "");
-        isProgrammaticChange = false;
-        editor.setReadOnly(false);
+    
+    // UI Elements
+    const editorEl = document.getElementById('editor');
+    const imageViewerEl = document.getElementById('image-viewer');
+    const previewImg = document.getElementById('preview-image');
 
-        // Determine Mode
-        const ext = filename.split('.').pop().toLowerCase();
-        let mode = "ace/mode/text";
-        if (ext === 'py') mode = "ace/mode/python";
-        else if (ext === 'js') mode = "ace/mode/javascript";
-        else if (ext === 'json') mode = "ace/mode/json";
-        else if (ext === 'html' || ext === 'xml') mode = "ace/mode/html";
-        else if (ext === 'css') mode = "ace/mode/css";
-        else if (ext === 'vert' || ext === 'frag' || ext === 'glsl') mode = "ace/mode/glsl";
+    if (imageExts.includes(ext)) {
+        // Show Image Viewer
+        editorEl.style.display = 'none';
+        imageViewerEl.style.display = 'flex';
+        previewImg.src = content; // content is Data URL
+    } else {
+        // Show Editor
+        editorEl.style.display = 'block';
+        imageViewerEl.style.display = 'none';
         
-        editor.session.setMode(mode);
+        if (isBinary(content)) {
+            // Show placeholder or read-only
+            editor.setValue(`<< Binary File: ${filename} >>\n<< Content hidden >>`);
+            editor.setReadOnly(true);
+            editor.session.setMode("ace/mode/text");
+        } else {
+            isProgrammaticChange = true;
+            editor.setValue(content || "");
+            isProgrammaticChange = false;
+            editor.setReadOnly(false);
+    
+            // Determine Mode
+            let mode = "ace/mode/text";
+            if (ext === 'py') mode = "ace/mode/python";
+            else if (ext === 'js') mode = "ace/mode/javascript";
+            else if (ext === 'json') mode = "ace/mode/json";
+            else if (ext === 'html' || ext === 'xml') mode = "ace/mode/html";
+            else if (ext === 'css') mode = "ace/mode/css";
+            else if (ext === 'vert' || ext === 'frag' || ext === 'glsl') mode = "ace/mode/glsl";
+            
+            editor.session.setMode(mode);
+        }
     }
     
-    editor.clearSelection();
     updateFileList();
-    // No saveProjectAndFiles() needed here? Actually we might want to sync if we changed file.
-    // But saveProjectAndFiles checks if binary anyway.
-    saveProjectAndFiles();
+    
+    // Update Label
+    const label = document.getElementById('current-file-label');
+    if (label) label.textContent = filename;
 }
+
 
 function addFile() {
     const name = prompt("Enter new filename (e.g. module.py, shader.vert):", "new_module.py");

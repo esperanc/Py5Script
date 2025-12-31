@@ -18,6 +18,16 @@ main {
     font-size: 16px;
 }
 
+#image-viewer {
+    flex: 1;
+    display: none;
+    /* Toggled via JS */
+    justify-content: center;
+    align-items: center;
+    background: #1e1e1e;
+    overflow: auto;
+}
+
 #preview-container {
     width: 50%;
     background: #111;
