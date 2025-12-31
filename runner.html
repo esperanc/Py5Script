@@ -266,7 +266,7 @@
                             )
                 return node
 
-        def entry_point():
+        async def entry_point():
             # Standard file IO is sufficient in Pyodide
             import os
             import importlib.abc
@@ -402,6 +402,24 @@
             except Exception as e:
                 pass
             # -----------------------
+
+            # --- Package Installation (requirements.txt) ---
+            if os.path.exists("requirements.txt"):
+                try:
+                    import micropip
+                    with open("requirements.txt", "r") as f:
+                        packages = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+                    
+                    if packages:
+                        print(f"Installing packages: {packages}...")
+                        await micropip.install(packages)
+                        print("Packages installed.")
+                except Exception as e:
+                    print(f"Error installing packages: {e}")
+                    # Post error but maybe continue
+                    msg = {"type": "error", "message": f"Failed to install requirements: {e}", "filename": "requirements.txt", "line": 0}
+                    js.window.parent.postMessage(to_js(msg, dict_converter=js.Object.fromEntries), "*")
+            # ---------------------------------------------
 
             # Asset Helper (Explicit URL resolution)
             def asset(filename):
@@ -584,7 +602,7 @@
             proxy = create_proxy(sketch)
             js.window.p5.new(proxy)
 
-        entry_point()
+        await entry_point()
     </script>
 </body>
 </html>
