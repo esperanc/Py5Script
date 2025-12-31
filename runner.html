@@ -411,15 +411,13 @@
                     try:
                         import micropip
                     except ImportError:
-                        # Attempt to load micropip via Pyodide JS API
-                        # This works if pyodide is exposed on window or accessible via js
-                        # PyScript usually exposes it or we are inside it.
+                        # Attempt to load micropip via Pyodide JS API wrapper
                         try:
-                            await js.pyodide.loadPackage("micropip")
+                            import pyodide_js
+                            await pyodide_js.loadPackage("micropip")
                             import micropip
                         except Exception as e:
                              print(f"Error loading micropip: {e}")
-                             # Last ditch: maybe it is 'micropip' package string?
                              raise e
 
                     with open("requirements.txt", "r") as f:
