@@ -175,11 +175,11 @@ function addFile() {
     if (!name) return;
     
     // Allowed extensions
-    const allowed = ['.py', '.vert', '.frag', '.glsl'];
+    const allowed = ['.py', '.vert', '.frag', '.glsl', '.txt', '.json', '.xml', '.csv', '.css', '.js'];
     const hasValidExt = allowed.some(ext => name.endsWith(ext));
 
     if (!hasValidExt) {
-        alert("Filename must end with .py, .vert, .frag, or .glsl");
+        alert("Filename must end with a valid extension (e.g. .py, .txt, .json, .vert)");
         return;
     }
     if (projectFiles[name]) {
