@@ -208,8 +208,9 @@ function checkDirty() {
 }
 
 async function loadProjectFromBlob(blob, filenameHint, callbacks = {}, options = {}) {
-     // options: { redirect: boolean (default true) }
+     // options: { redirect: boolean (default true), skipRegistry: boolean (default false) }
      const shouldRedirect = options.redirect !== false;
+     const skipRegistry = options.skipRegistry === true;
 
      // callbacks: { onImport: (msg)=>void, onError: (msg)=>void, onUpdateUI: ()=>void }
      const log = callbacks.onImport || console.log;
@@ -338,8 +339,10 @@ async function loadProjectFromBlob(blob, filenameHint, callbacks = {}, options =
      localStorage.setItem(keyName, newProjectName);
      localStorage.setItem(keyDirty, 'false'); // Clean on import
 
-     // Update Registry
-     updateRegistryEntry(newId, newProjectName);
+     // Update Registry (skip for temporary view-only projects)
+     if (!skipRegistry) {
+         updateRegistryEntry(newId, newProjectName);
+     }
 
      // Callback before redirect?
      if (callbacks.onImport) callbacks.onImport(`Project imported as ${newProjectName}.`);
@@ -517,7 +520,7 @@ async function loadProjectFromURL(callbacks = {}) {
                  const response = await fetch(sketchUrl);
                  if (response.ok) {
                      const blob = await response.blob();
-                     await loadProjectFromBlob(blob, filename, callbacks, { redirect: false });
+                     await loadProjectFromBlob(blob, filename, callbacks, { redirect: false, skipRegistry: callbacks.skipRegistry });
                      loaded = true;
                      // removed early return to allow onLoaded callback below
                  }
@@ -529,7 +532,7 @@ async function loadProjectFromURL(callbacks = {}) {
                     // Or reuse loadProjectFromBlob?
                     // Let's reuse loadProjectFromBlob for text too
                     const blob = new Blob([text], {type: 'text/plain'});
-                    await loadProjectFromBlob(blob, filename, callbacks, { redirect: false });
+                    await loadProjectFromBlob(blob, filename, callbacks, { redirect: false, skipRegistry: callbacks.skipRegistry });
                     loaded = true;
                  } else {
                     err(`Failed to fetch sketch: ${sketchUrl} (${response.status})`);

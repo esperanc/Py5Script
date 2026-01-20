@@ -87,6 +87,38 @@
         const consoleContent = document.getElementById('console-content');
         const consoleOverlay = document.getElementById('console-overlay');
         
+        // --- CLEANUP OLD TEMPORARY PROJECTS ---
+        function cleanupOldViewProjects() {
+            const MAX_TEMP_PROJECTS = 5; // Keep only the 5 most recent temporary projects
+            const viewProjects = [];
+            
+            // Find all view-* projects in localStorage
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith('project_view-') && key.endsWith('_files')) {
+                    const id = key.replace('project_', '').replace('_files', '');
+                    const timestamp = parseInt(id.replace('view-', ''));
+                    if (!isNaN(timestamp)) {
+                        viewProjects.push({ id, timestamp, key });
+                    }
+                }
+            }
+            
+            // Sort by timestamp (newest first)
+            viewProjects.sort((a, b) => b.timestamp - a.timestamp);
+            
+            // Remove old projects beyond the limit
+            for (let i = MAX_TEMP_PROJECTS; i < viewProjects.length; i++) {
+                const proj = viewProjects[i];
+                localStorage.removeItem(`project_${proj.id}_files`);
+                localStorage.removeItem(`project_${proj.id}_name`);
+                localStorage.removeItem(`project_${proj.id}_dirty`);
+            }
+        }
+        
+        // Run cleanup on page load
+        cleanupOldViewProjects();
+        
         // --- CONSOLE LOGIC ---
         function logToConsole(msg, type) {
             const el = document.createElement('span');
@@ -145,11 +177,15 @@
                 projectId = 'view-' + Date.now();
                 
                 await loadProjectFromURL({
+                     skipRegistry: true,  // Don't add temporary projects to registry
                      onImport: (msg) => logToConsole(msg, 'print'),
                      onError: (msg) => logToConsole(msg, 'error'),
                      onLoaded: () => {
-                         // Save to TEMP Scoped Storage so runner can find it
-                         saveProjectAndFiles();
+                         // Save to storage so runner can access files, but skip registry to hide from project list
+                         const keyFiles = `${PROJECT_KEY_PREFIX}${projectId}_files`;
+                         const keyName = `${PROJECT_KEY_PREFIX}${projectId}_name`;
+                         localStorage.setItem(keyFiles, JSON.stringify(projectFiles));
+                         localStorage.setItem(keyName, projectName);
                          runSketch();
                      }
                 });
