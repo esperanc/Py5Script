@@ -14,7 +14,6 @@ def setup():
   checkbox.position(0, 100);
 
   # Call repaint() when the checkbox changes.
-  from pyodide.ffi import create_proxy
   repaint_proxy = create_proxy(lambda event: repaint())
   checkbox.changed(repaint_proxy)
 
