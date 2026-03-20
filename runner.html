@@ -457,6 +457,29 @@
             import builtins
             globals()['open'] = builtins.open
 
+            # --- Pyodide / JS interop helpers (available everywhere, no import needed) ---
+            from pyodide.ffi import to_js as _to_js, create_proxy as _create_proxy
+            import js as _js_mod
+
+            def js_array(iterable):
+                """Convert a Python list or tuple to a JavaScript Array."""
+                return _to_js(iterable)
+
+            def js_object(d):
+                """Convert a Python dict to a plain JavaScript object."""
+                return _to_js(d, dict_converter=_js_mod.Object.fromEntries)
+
+            # Inject into globals AND builtins so imported modules get them too
+            for _name, _val in [
+                ('to_js',        _to_js),
+                ('create_proxy', _create_proxy),
+                ('js_array',     js_array),
+                ('js_object',    js_object),
+            ]:
+                globals()[_name] = _val
+                setattr(builtins, _name, _val)
+            # -------------------------------------------------------------------------
+
 
 
             def sketch(p):

@@ -88,17 +88,34 @@ Some p5.js functions conflict with Python standard libraries or built-ins. To av
     *   `P5.random(0, 255)`: Use p5's random for visual noise or drawing.
 *   **`map`, `set`, `min`, `max`**: These default to Python's built-in versions. Use `P5.map(...)` for the p5 range mapping function.
 
-#### 2. Data Structures (Lists vs Arrays)
-Avoid passing Python lists directly to p5 functions that expect to modify them in-place, such as `P5.shuffle()`.
+#### 2. Data Structures (Python Lists/Tuples vs JS Arrays)
+Python lists and tuples are **not** automatically converted to JavaScript Arrays when passed to p5 functions. This can cause subtle failures in functions like `setUniform()`, `stroke()` with a colour array, or anything shader-related.
 
-*   **Bad**: `P5.shuffle(my_python_list)` (May cause errors or return wrapped proxies).
-*   **Good**: use `random.shuffle(my_python_list)` (Native Python).
-*   **Good**: If you *must* pass a list to a JS library, convert it:
-    ```python
-    from pyodide.ffi import to_js
-    js_array = to_js(my_python_list)
-    P5.someFunc(js_array)
-    ```
+The following helpers are **available globally** in every sketch — no import needed:
+
+| Helper | What it does |
+|---|---|
+| `js_array(iterable)` | Convert a Python list or tuple → JS Array |
+| `js_object(dict)` | Convert a Python dict → plain JS object |
+| `to_js(value)` | Raw Pyodide converter (supports extra options) |
+| `create_proxy(fn)` | Keep a Python callback alive in JS scope |
+
+```python
+# Shader uniform — pass a list as a JS Array
+def setup():
+    shader = createShader(vert, frag)
+    shader(shader)
+    shader.setUniform('p', js_array([-0.74364388703, 0.13182590421]))
+    shader.setUniform('r', 0.001)
+
+# Or use to_js directly for more control
+shader.setUniform('palette', to_js([255, 100, 50]))
+```
+
+For in-place mutation (like `P5.shuffle()`), prefer the Python equivalent:
+
+*   **Good**: `random.shuffle(my_list)` (native Python)
+*   **Good**: `P5.shuffle(js_array(my_list))` (explicit JS Array)
 
 #### 3. Numpy & Types
 Numpy scalars (e.g. `np.float64`) are passed as temporary proxies to JavaScript. If p5 stores these (like `vertex()` does before `end_shape()`), the proxy might be destroyed before p5 uses it, causing a `borrowed proxy was automatically destroyed` error.
@@ -111,12 +128,10 @@ Numpy scalars (e.g. `np.float64`) are passed as temporary proxies to JavaScript.
     ```
 
 #### 4. Callbacks & Proxies
-When using p5 functions that expect a callback (like DOM interactions), you must wrap your Python function in a `create_proxy` to keep it alive in the JavaScript scope.
+When using p5 functions that expect a callback (like DOM interactions), wrap your Python function in `create_proxy` to keep it alive in the JavaScript scope. **`create_proxy` is available globally — no import needed.**
 
 ```python
-# Example: DOM Checkbox
-from pyodide.ffi import create_proxy
-
+# Example: DOM Checkbox — no imports required
 def toggle_drawing(event):
     global is_drawing
     is_drawing = checkbox.checked()
@@ -124,12 +139,7 @@ def toggle_drawing(event):
 def setup():
     global checkbox
     checkbox = createCheckbox(' Draw Circle', True)
-    
-    # Create a proxy for the callback
-    proxy = create_proxy(toggle_drawing)
-    
-    # Attach it to the p5 element
-    checkbox.changed(proxy)
+    checkbox.changed(create_proxy(toggle_drawing))
 ```
 
 
