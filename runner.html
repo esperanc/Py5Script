@@ -440,6 +440,55 @@
                     js.window.parent.postMessage(to_js(msg, dict_converter=js.Object.fromEntries), "*")
             # ---------------------------------------------
 
+            # --- JavaScript Module Loading (js_modules.txt) ---
+            # Allows users to import ES modules by adding a js_modules.txt file.
+            # Format: one entry per line —  url = alias
+            # Lines starting with # are comments. Example:
+            #
+            #   # Tone.js audio synthesis
+            #   https://cdn.jsdelivr.net/npm/tone@14/build/Tone.js = Tone
+            #   https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.js = Chart
+            #
+            # Each alias becomes available as a global in the sketch.
+            if os.path.exists("js_modules.txt"):
+                try:
+                    with open("js_modules.txt", "r") as f:
+                        lines = f.readlines()
+
+                    entries = []
+                    for line in lines:
+                        line = line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        if "=" not in line:
+                            continue
+                        url, _, alias = line.partition("=")
+                        url = url.strip()
+                        alias = alias.strip()
+                        if url and alias:
+                            entries.append((url, alias))
+
+                    if entries:
+                        print(f"Loading JS modules: {[a for _, a in entries]}...")
+
+                    import builtins
+                    for url, alias in entries:
+                        try:
+                            mod = await js.eval(f"import('{url}')")
+                            globals()[alias] = mod
+                            setattr(builtins, alias, mod)
+                            print(f"JS module '{alias}' loaded from {url}")
+                        except Exception as mod_e:
+                            print(f"Error loading JS module '{alias}' from {url}: {mod_e}")
+                            msg = {"type": "error", "message": f"Failed to load JS module '{alias}': {mod_e}", "filename": "js_modules.txt", "line": 0}
+                            js.window.parent.postMessage(to_js(msg, dict_converter=js.Object.fromEntries), "*")
+
+                except Exception as e:
+                    print(f"Error reading js_modules.txt: {e}")
+                    msg = {"type": "error", "message": f"Failed to read js_modules.txt: {e}", "filename": "js_modules.txt", "line": 0}
+                    js.window.parent.postMessage(to_js(msg, dict_converter=js.Object.fromEntries), "*")
+            # -------------------------------------------------
+
             # Asset Helper (Explicit URL resolution)
             def asset(filename):
                 """

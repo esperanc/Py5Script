@@ -71,6 +71,27 @@ To use external Python packages (like `numpy`, `pandas`, `faker`), create a file
     ```
 The runner will automatically install these packages from PyPI (via Pyodide/Micropip) before starting your sketch.
 
+### External Javascript Libraries (js_modules.txt)
+
+You can import external Javascript libraries by creating a file named `js_modules.txt` in your project's root.
+
+Each line in this file should contain a url of a library, followed by an equal sign and the alias for that library in the python code.
+
+Example:
+```
+# The lil-gui library
+https://cdn.jsdelivr.net/npm/lil-gui@0.21/+esm = lil
+```
+
+The python code would then use the name `lil` as the module name. For instance
+
+```python
+gui = lil.GUI.new()
+```
+
+**Note**: The library must be available as an ESM (ES Module) build. Most modern CDN packages (jsDelivr, unpkg, skypack) offer ESM variants. 
+
+
 ### Snake Case Support
 You can optionally write p5.js code using `snake_case`. The IDE automatically converts it to `camelCase`.
 - `create_canvas(400, 400)` -> `P5.createCanvas(400, 400)`

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fixed PyScript + lil-gui</title>
+    <script src="https://cdn.jsdelivr.net/npm/lil-gui@0.19"></script>
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    <style>
+        body { font-family: system-ui; background: #111; color: #eee; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        #output { font-size: 2.5rem; font-weight: bold; color: #00ffcc; text-shadow: 0 0 10px #00ffcc44; }
+    </style>
+</head>
+<body>
+
+    <div id="output">Loading...</div>
+
+    <script type="py">
+        import js
+        from pyodide.ffi import create_proxy, to_js
+
+        # 1. Create a native JS object for the config
+        # This ensures lil-gui can write to it without proxy errors
+        config_dict = {
+            "my_number": 50,
+            "my_text": "PyScript Rocks",
+            "is_active": True
+        }
+        
+        # Convert dict to a real JS Object
+        config = to_js(config_dict, dict_converter=js.Object.fromEntries)
+
+        def update_display(value=None):
+            # We read directly from the JS 'config' object
+            el = js.document.getElementById("output")
+            
+            status = "ON" if config.is_active else "OFF"
+            el.innerText = f"[{status}] {config.my_text}: {config.my_number}"
+            el.style.opacity = "1" if config.is_active else "0.3"
+
+        # 2. Keep the proxy reference alive in a variable
+        proxy_callback = create_proxy(update_display)
+
+        # 3. Setup GUI
+        gui = js.window.lil.GUI.new()
+        
+        # Add controls and attach the proxy callback
+        gui.add(config, "my_number", 0, 100, 1).name("Level").onChange(proxy_callback)
+        gui.add(config, "my_text").name("Label").onChange(proxy_callback)
+        gui.add(config, "is_active").name("Toggle Status").onChange(proxy_callback)
+
+        # Initial call
+        update_display()
+    </script>
+</body>
+</html>

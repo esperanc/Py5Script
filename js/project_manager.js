@@ -86,7 +86,7 @@ function handleFileUpload(event) {
     };
 
     // Re-do Reader Logic based on type
-    const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml', '.gsdict', '.vert', '.frag', '.glsl'];
+    const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml', '.gsdict', '.vert', '.frag', '.glsl', '.toml'];
     const isText = textExts.some(ext => file.name.toLowerCase().endsWith(ext));
 
     if (isText) {
@@ -237,7 +237,7 @@ async function loadProjectFromBlob(blob, filenameHint, callbacks = {}, options =
                  
                  const file = zip.file(filename);
                  // Heuristic: .py, .txt, .csv, .json, .md, .xml, .yaml, .gsdict, .vert, .frag, .glsl -> String
-                 const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml', '.gsdict', '.vert', '.frag', '.glsl'];
+                 const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml', '.gsdict', '.vert', '.frag', '.glsl', '.toml'];
                  const isText = textExts.some(ext => filename.toLowerCase().endsWith(ext));
 
                  if (isText) {
@@ -483,7 +483,7 @@ async function loadProjectFromURL(callbacks = {}) {
                      if (zip.files[filename].dir) continue;
                      
                      const file = zip.file(filename);
-                     const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml', '.gsdict', '.vert', '.frag', '.glsl'];
+                     const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml', '.gsdict', '.vert', '.frag', '.glsl', '.toml'];
                      const isText = textExts.some(ext => filename.toLowerCase().endsWith(ext));
     
                      if (isText) {
