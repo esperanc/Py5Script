@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Py5Script Demos</title>
+    <link rel="icon" type="image/x-icon" href="../favicon.ico">
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --card-bg: #2a2a2a;
+            --text-color: #eee;
+            --accent-color: #007acc;
+            --view-color: #17a2b8;
+            --run-color: #28a745;
+            --border-color: #444;
+            --hover-bg: #333;
+        }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 50px;
+            max-width: 800px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin: 0 0 10px 0;
+            background: linear-gradient(135deg, #fff 0%, #aaa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        header p {
+            color: #888;
+            font-size: 1.1rem;
+        }
+
+        .demo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 1200px;
+        }
+
+        .demo-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .demo-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-color);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            background: var(--hover-bg);
+        }
+
+        .demo-card h3 {
+            margin: 0 0 15px 0;
+            font-size: 1.2rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #fff;
+        }
+
+        .demo-info {
+            font-size: 0.85rem;
+            color: #777;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .file-type {
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #444;
+            color: #aaa;
+            text-transform: uppercase;
+            font-weight: bold;
+            font-size: 0.7rem;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-align: center;
+            transition: filter 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            filter: brightness(1.2);
+        }
+
+        .btn-ide {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .btn-view {
+            background-color: var(--view-color);
+            color: white;
+        }
+
+        .icon {
+            width: 16px;
+            height: 16px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+        }
+
+        footer {
+            margin-top: 60px;
+            color: #555;
+            font-size: 0.9rem;
+        }
+
+        footer a {
+            color: #777;
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 600px) {
+            .demo-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Py5Script Demos</h1>
+    <p>Collection of sketches, shaders, and examples powered by Python and p5.js</p>
+</header>
+
+<div class="demo-grid">
+    <div class="demo-card">
+        <h3>10 print variant 1</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>10 print variant 1.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/10%20print%20variant%201.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/10%20print%20variant%201.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>10 print variant 2</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>10 print variant 2.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/10%20print%20variant%202.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/10%20print%20variant%202.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>10 print variant 3</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>10 print variant 3.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/10%20print%20variant%203.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/10%20print%20variant%203.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>10 print variant 4</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>10 print variant 4.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/10%20print%20variant%204.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/10%20print%20variant%204.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>1d automaton</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>1d automaton.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/1d%20automaton.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/1d%20automaton.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>curve_modeler</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>curve_modeler.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/curve_modeler.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/curve_modeler.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>genuary 01 One Color One Shape</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>genuary 01 One Color One Shape.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/genuary%2001%20One%20Color%20One%20Shape.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/genuary%2001%20One%20Color%20One%20Shape.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>genuary19</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>genuary19.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/genuary19.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/genuary19.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>geometry_example</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>geometry_example.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/geometry_example.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/geometry_example.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>gui_example</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>gui_example.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/gui_example.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/gui_example.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>hershey_fonts</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>hershey_fonts.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/hershey_fonts.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/hershey_fonts.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>lil_gui_example</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>lil_gui_example.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/lil_gui_example.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/lil_gui_example.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>loadImage_demo</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>loadImage_demo.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/loadImage_demo.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/loadImage_demo.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>mandelbrot_shader</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>mandelbrot_shader.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/mandelbrot_shader.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/mandelbrot_shader.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>noise_pattern</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>noise_pattern.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/noise_pattern.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/noise_pattern.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>phong_shader</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>phong_shader.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/phong_shader.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/phong_shader.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>proxy_example</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>proxy_example.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/proxy_example.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/proxy_example.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>py5script_tube_logo</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>py5script_tube_logo.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/py5script_tube_logo.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/py5script_tube_logo.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>sierpinksi</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>sierpinksi.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/sierpinksi.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/sierpinksi.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>sketch_2025_12_13</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>sketch_2025_12_13.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/sketch_2025_12_13.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/sketch_2025_12_13.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>sketch_2025_12_24</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>sketch_2025_12_24.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/sketch_2025_12_24.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/sketch_2025_12_24.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>sketch_2025_12_30</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>sketch_2025_12_30.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/sketch_2025_12_30.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/sketch_2025_12_30.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>spirograph</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>spirograph.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/spirograph.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/spirograph.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>texture_tube</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>texture_tube.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/texture_tube.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/texture_tube.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>tone_example</h3>
+        <div class="demo-info">
+            <span class="file-type">zip</span>
+            <span>tone_example.zip</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/tone_example.zip" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/tone_example.zip" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+    <div class="demo-card">
+        <h3>webGLDemo</h3>
+        <div class="demo-info">
+            <span class="file-type">py</span>
+            <span>webGLDemo.py</span>
+        </div>
+        <div class="actions">
+            <a href="../ide.html?sketch=demo/webGLDemo.py" class="btn btn-ide" title="Open in IDE">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+            </a>
+            <a href="../view.html?sketch=demo/webGLDemo.py" class="btn btn-view" title="Run in View Mode">
+                <svg class="icon" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                Play
+            </a>
+        </div>
+    </div>
+</div>
+
+<footer>
+    <p>Powered by <a href="https://github.com/esperanc/Py5Script">Py5Script</a></p>
+</footer>
+
+</body>
+</html>
