@@ -152,10 +152,23 @@
         </div>
     </div>
 
+    <!-- Rename/Save As Modal -->
+    <div id="rename-modal" class="modal-dialog">
+         <h2 style="margin-top:0;">Project Name</h2>
+         <div style="margin-bottom: 15px;">
+             <input type="text" id="rename-input" style="width:100%; padding:8px; box-sizing:border-box; background:#222; color:#fff; border:1px solid #555; border-radius:4px;" placeholder="Enter project name...">
+         </div>
+         <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button id="cancel-rename-btn" style="background: #555;">Cancel</button>
+            <button id="save-as-btn" class="btn-open" style="background: #6f42c1;">Save As</button>
+            <button id="confirm-rename-btn" class="btn-run" style="background: #28a745;">Rename</button>
+        </div>
+    </div>
+
     <!-- Application Logic -->
-    <script src="js/settings.js?v=1"></script>
-    <script src="js/name_generator.js?v=1"></script>
-    <script src="js/project_manager.js?v=2"></script>
-    <script src="js/ide_ui.js?v=2"></script>
+    <script src="js/settings.js?v=100"></script>
+    <script src="js/name_generator.js?v=100"></script>
+    <script src="js/project_manager.js?v=100"></script>
+    <script src="js/ide_ui.js?v=100"></script>
 </body>
 </html>

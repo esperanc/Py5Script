@@ -1,4 +1,4 @@
-
+console.log("ide_ui.js loading... v=2 with Rename Modal");
 // --- UI ELEMENTS ---
 const fileListEl = document.getElementById('file-list');
 const addFileBtn = document.getElementById('add-file-btn');
@@ -599,9 +599,11 @@ fileInput.addEventListener('change', (e) => loadProjectFromBlob(e.target.files[0
 // Setup Export - REMOVED (using triggerExport directly)
 // setupExportHandlers(...)
 
-// Modal Overlay Click - Only for Settings now
+// Modal Overlay Click
 document.getElementById('modal-overlay').addEventListener('click', () => {
      document.getElementById('settings-modal').style.display = 'none';
+     document.getElementById('projects-modal').style.display = 'none';
+     document.getElementById('rename-modal').style.display = 'none';
      document.getElementById('modal-overlay').style.display = 'none';
 });
 
@@ -641,18 +643,59 @@ settingSoftTabs.addEventListener('change', (e) => updateSetting('softTabs', e.ta
 
 settingInvisibles.addEventListener('change', (e) => updateSetting('showInvisibles', e.target.checked));
 
-// --- PROJECT NAME LOGIC ---
+// --- PROJECT NAME / RENAME MODAL LOGIC ---
+const renameModal = document.getElementById('rename-modal');
+const renameInput = document.getElementById('rename-input');
+const confirmRenameBtn = document.getElementById('confirm-rename-btn');
+const saveAsBtn = document.getElementById('save-as-btn');
+const cancelRenameBtn = document.getElementById('cancel-rename-btn');
+
+function openRenameModal() {
+    console.log("Opening Rename Modal...");
+    renameInput.value = projectName;
+    renameModal.style.display = 'block';
+    document.getElementById('modal-overlay').style.display = 'block';
+    renameInput.focus();
+    renameInput.select();
+}
+
+function closeRenameModal() {
+    renameModal.style.display = 'none';
+    document.getElementById('modal-overlay').style.display = 'none';
+}
+
+renameBtn.addEventListener('click', openRenameModal);
+cancelRenameBtn.addEventListener('click', closeRenameModal);
+
+confirmRenameBtn.addEventListener('click', () => {
+    const newName = renameInput.value.trim();
+    if (newName !== "") {
+        renameProject(newName);
+        closeRenameModal();
+    }
+});
+
+saveAsBtn.addEventListener('click', () => {
+    const newName = renameInput.value.trim();
+    if (newName !== "") {
+        saveProjectAs(newName);
+        closeRenameModal();
+    }
+});
+
+// Handle Enter/Esc in Rename Modal
+renameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        confirmRenameBtn.click();
+    } else if (e.key === 'Escape') {
+        closeRenameModal();
+    }
+});
+
 function updateProjectNameUI() {
     if (projectNameLabel) projectNameLabel.textContent = projectName;
 }
 window.updateProjectNameUI = updateProjectNameUI; // Expose to project_manager.js
-
-renameBtn.addEventListener('click', () => {
-    const newName = prompt("Rename Project:", projectName);
-    if (newName && newName.trim() !== "") {
-        renameProject(newName.trim());
-    }
-});
 
 // --- PROJECTS MODAL LOGIC ---
 const projectsModal = document.getElementById('projects-modal');
@@ -750,9 +793,11 @@ const originalWindowOnClick = window.onclick;
 window.onclick = function(event) {
     if (originalWindowOnClick) originalWindowOnClick(event);
     if (event.target == projectsModal) closeProjectsModal();
+    if (event.target == renameModal) closeRenameModal();
     if (event.target == document.getElementById('modal-overlay')) {
         closeSettings();
         closeProjectsModal();
+        closeRenameModal();
     }
 }
 

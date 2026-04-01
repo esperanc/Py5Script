@@ -199,6 +199,58 @@ function renameProject(newName) {
     window.location.href = `ide.html?id=${newId}`;
 }
 
+// Create a copy of the project under a new name/ID
+function saveProjectAs(newName) {
+    if (!newName || !newName.trim()) return;
+    
+    // Slugify helper
+    const slugify = (text) => text.toString().toLowerCase()
+        .replace(/\s+/g, '-')           
+        .replace(/[^\w\-]+/g, '')       
+        .replace(/\-\-+/g, '-')         
+        .replace(/^-+/, '')             
+        .replace(/-+$/, '');
+        
+    const newId = slugify(newName);
+    
+    if (!newId) {
+        alert("Invalid project name.");
+        return;
+    }
+    
+    if (newId === projectId) {
+        alert("Please choose a different name for 'Save As'.");
+        return;
+    }
+    
+    // Check Collision
+    const registry = getProjectRegistry();
+    if (registry[newId]) {
+        alert(`Project "${newName}" (ID: ${newId}) already exists. Please choose another name.`);
+        return;
+    }
+
+    // Sync editor content if available
+    if (typeof editor !== 'undefined' && editor.getValue && !isBinary(projectFiles[currentFile])) {
+        projectFiles[currentFile] = editor.getValue();
+    }
+    
+    // SAVE TO NEW ID
+    const keyFilesNew = `${PROJECT_KEY_PREFIX}${newId}_files`;
+    const keyNameNew = `${PROJECT_KEY_PREFIX}${newId}_name`;
+    const keyDirtyNew = `${PROJECT_KEY_PREFIX}${newId}_dirty`;
+
+    localStorage.setItem(keyFilesNew, JSON.stringify(projectFiles));
+    localStorage.setItem(keyNameNew, newName);
+    localStorage.setItem(keyDirtyNew, 'false'); // Copy is clean
+    
+    // Update Registry (Add New)
+    updateRegistryEntry(newId, newName);
+    
+    // Redirect
+    window.location.href = `ide.html?id=${newId}`;
+}
+
 // Check Dirty before action
 function checkDirty() {
     if (isDirty) {
@@ -663,3 +715,7 @@ async function initProjectID() {
     
     return true; // Continue loading
 }
+
+// Export globals
+window.renameProject = renameProject;
+window.saveProjectAs = saveProjectAs;
