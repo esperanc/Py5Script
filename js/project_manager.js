@@ -510,11 +510,43 @@ async function loadProjectFromURL(callbacks = {}) {
     const params = new URLSearchParams(window.location.search);
     let loaded = false;
 
+    // Helper to resolve collisions
+    const resolveCollision = (name) => {
+        const registry = getProjectRegistry();
+        const slugify = (text) => text.toString().toLowerCase()
+            .replace(/\s+/g, '-')           
+            .replace(/[^\w\-]+/g, '')       
+            .replace(/\-\-+/g, '-')         
+            .replace(/^-+/, '')             
+            .replace(/-+$/, '');
+
+        let id = slugify(name);
+        if (registry[id]) {
+            if (confirm(`A project named "${name}" already exists. Overwrite existing project?\n\nClick Cancel to create a copy instead.`)) {
+                return { id, name }; // Overwrite
+            } else {
+                let counter = 1;
+                let baseName = name;
+                while (registry[slugify(`${baseName} (${counter})`)]) {
+                    counter++;
+                }
+                const finalName = `${baseName} (${counter})`;
+                return { id: slugify(finalName), name: finalName };
+            }
+        }
+        return { id, name };
+    };
+
     // 1. URL Code String (?code=...)
     if (params.has('code')) {
         const compressed = params.get('code');
         const code = LZString.decompressFromEncodedURIComponent(compressed);
         if (code) {
+             const sharedName = params.get('name') || "Shared Project";
+             const resolved = resolveCollision(sharedName);
+             
+             projectId = resolved.id;
+             projectName = resolved.name;
              projectFiles = { 'sketch.py': code };
              currentFile = 'sketch.py';
              loaded = true;
@@ -528,8 +560,8 @@ async function loadProjectFromURL(callbacks = {}) {
         if (base64) {
              try {
                  const zip = await JSZip.loadAsync(base64, {base64: true});
-                 // Reuse logic similar to ZIP import but populate projectFiles directly
-                 projectFiles = {}; // clear
+                 // Reuse logic similar to ZIP import
+                 const newProjectFiles = {}; 
                  
                  for (const filename in zip.files) {
                      if (zip.files[filename].dir) continue;
@@ -539,7 +571,7 @@ async function loadProjectFromURL(callbacks = {}) {
                      const isText = textExts.some(ext => filename.toLowerCase().endsWith(ext));
     
                      if (isText) {
-                         projectFiles[filename] = await file.async("string");
+                         newProjectFiles[filename] = await file.async("string");
                      } else {
                          const b64 = await file.async("base64");
                          let mime = 'application/octet-stream';
@@ -547,9 +579,16 @@ async function loadProjectFromURL(callbacks = {}) {
                          else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) mime = 'image/jpeg';
                          else if (filename.endsWith('.gif')) mime = 'image/gif';
                          
-                         projectFiles[filename] = `data:${mime};base64,${b64}`;
+                         newProjectFiles[filename] = `data:${mime};base64,${b64}`;
                      }
                  }
+                 
+                 const sharedName = params.get('name') || "Shared Project";
+                 const resolved = resolveCollision(sharedName);
+                 
+                 projectId = resolved.id;
+                 projectName = resolved.name;
+                 projectFiles = newProjectFiles;
                  
                  currentFile = 'sketch.py';
                  if (!projectFiles['sketch.py']) {

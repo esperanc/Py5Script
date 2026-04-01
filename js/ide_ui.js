@@ -1,4 +1,4 @@
-console.log("ide_ui.js loading... v=2 with Rename Modal");
+
 // --- UI ELEMENTS ---
 const fileListEl = document.getElementById('file-list');
 const addFileBtn = document.getElementById('add-file-btn');
@@ -288,7 +288,8 @@ function generateShareLink() {
     if (isSingleText) {
         const code = projectFiles['sketch.py'];
         const compressed = LZString.compressToEncodedURIComponent(code);
-        const url = window.location.origin + window.location.pathname.replace('ide.html', 'view.html') + '?code=' + compressed;
+        const url = window.location.origin + window.location.pathname.replace('ide.html', 'view.html') + 
+                    '?code=' + compressed + '&name=' + encodeURIComponent(projectName);
         
         navigator.clipboard.writeText(url).then(() => {
             alert("Link copied to clipboard! Share it with anyone.");
@@ -312,7 +313,8 @@ function generateShareLink() {
         
         zip.generateAsync({type:"base64"}).then(function(base64) {
              const compressed = LZString.compressToEncodedURIComponent(base64);
-             const url = window.location.origin + window.location.pathname.replace('ide.html', 'view.html') + '?zip=' + compressed;
+             const url = window.location.origin + window.location.pathname.replace('ide.html', 'view.html') + 
+                         '?zip=' + compressed + '&name=' + encodeURIComponent(projectName);
              
              // Check length warning
              if (url.length > 2000) {
