@@ -164,11 +164,25 @@ def setup():
 ```
 
 
-### Modes: IDE vs Viewer
+### Modes: IDE vs Viewer vs Standalone
 1.  **IDE Mode (`ide.html`)**: The full integrated development environment.
 2.  **Viewer Mode (`view.html`)**: A minimal, full-screen runner.
     - Can load shared projects via `?zip=` or `?code=`.
     - Useful for sharing finished work.
+3.  **Standalone Mode (`runner.html`)**: Running directly outside the IDE using external editors (see below).
+
+### Standalone Use (External Editor)
+You can build Py5Script apps without using the IDE by directly utilizing `runner.html`. This is extremely useful if you prefer to write your code in editors like **VS Code** or **Sublime Text**.
+
+1. **Setup**: Create a directory for your project. Copy the IDE's `runner.html` file into your directory and rename it to `index.html`.
+2. **Files**: Create your core `sketch.py`. You can also add `requirements.txt`, `js_modules.txt`, and any other `.py` files to import.
+3. **Execution**: Start a local web server (e.g., `python3 -m http.server 8000`) and browse to `localhost:8000`.
+
+**How it works:**
+When loaded outside the IDE, `runner.html` enters **Standalone Mode**. It automatically uses Pyodide to fetch your `sketch.py`, `requirements.txt`, and `js_modules.txt` from the local web server. It also dynamically intercepts regular Python `import module` statements and fetches the corresponding `.py` files automatically.
+
+**A Note on Assets:**
+Standard `p5.js` functions like `P5.loadImage("cat.png")` or `P5.loadStrings("data.csv")` will work seamlessly since they fetch over standard HTTP. However, standard Python basic `open("data.txt")` requires the file to be present in Pyodide's virtual filesystem. It is recommended to stick to `p5.js` native loaders or use `pyodide.http.pyfetch` for raw text data in standalone mode.
 
 ### URL Parameters
 - `?id=<project-id>`: Loads a locally saved project by its ID.
