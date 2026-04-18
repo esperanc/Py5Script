@@ -298,11 +298,10 @@
             # Ensure stdout is still set
             sys.stdout = StdoutCatcher()
             
-            # Parse URL params for case-mode (Global setting)
-            params = js.URLSearchParams.new(js.window.location.search)
-            # Parse Project ID from runner URL
+            # Parse URL params
             params = js.URLSearchParams.new(js.window.location.search)
             project_id = params.get('id')
+            case_mode = params.get('case') or 'both'
             raw_window_name = js.window.name or ""
             
             # Will be set to True if no project is loaded from localStorage or via IDE
@@ -416,33 +415,33 @@
                     if project_json:
                         project_files = json.loads(project_json)
                         for filename, content in project_files.items():
-                        try:
-                            # Check if Data URL (Binary/Asset)
-                            if content.startswith('data:'):
-                                # Decode Data URL
-                                # Format: data:[mime];base64,[data]
-                                if ',' in content:
-                                    _, headerless_data = content.split(',', 1)
-                                    binary_data = base64.b64decode(headerless_data)
+                            try:
+                                # Check if Data URL (Binary/Asset)
+                                if content.startswith('data:'):
+                                    # Decode Data URL
+                                    # Format: data:[mime];base64,[data]
+                                    if ',' in content:
+                                        _, headerless_data = content.split(',', 1)
+                                        binary_data = base64.b64decode(headerless_data)
+                                        
+                                        # Write to FS
+                                        with open(filename, 'wb') as f:
+                                            f.write(binary_data)
+                                        
+                                        # Add to hydration map for p5 interceptors
+                                        hydrated_assets[filename] = content
+                                else:
+                                    # Regular Text File (Module)
+                                    with open(filename, 'w') as f:
+                                        f.write(content)
                                     
-                                    # Write to FS
-                                    with open(filename, 'wb') as f:
-                                        f.write(binary_data)
-                                    
-                                    # Add to hydration map for p5 interceptors
-                                    hydrated_assets[filename] = content
-                            else:
-                                # Regular Text File (Module)
-                                with open(filename, 'w') as f:
-                                    f.write(content)
-                                
-                                # Register as Data URL for p5 interceptors (loadStrings, loadShader)
-                                # We treat all text-based assets as text/plain here for simplicity
-                                b64_text = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-                                hydrated_assets[filename] = f"data:text/plain;base64,{b64_text}"
-                        except Exception as inner_e:
-                            # print(f"Error hydrating {filename}: {inner_e}")
-                            pass
+                                    # Register as Data URL for p5 interceptors (loadStrings, loadShader)
+                                    # We treat all text-based assets as text/plain here for simplicity
+                                    b64_text = base64.b64encode(content.encode('utf-8')).decode('utf-8')
+                                    hydrated_assets[filename] = f"data:text/plain;base64,{b64_text}"
+                            except Exception as inner_e:
+                                # print(f"Error hydrating {filename}: {inner_e}")
+                                pass
                 except Exception as e:
                     pass
                 
@@ -642,7 +641,6 @@
                         print("Error: Could not find sketch.py on paths. Source is empty!")
                     return
                     
-                print("Source code successfully loaded. Length:", len(source))
 
                 try:
                     tree = ast.parse(source)
@@ -678,13 +676,9 @@
                 ast.fix_missing_locations(new_tree)
 
                 # 3. Compile and Execute
-                print("Executing AST...")
                 try:
                     code_obj = compile(new_tree, filename="sketch.py", mode="exec")
                     exec(code_obj, globals())
-                    print("AST execution successful. Globals contain 'setup':", 'setup' in globals())
-                    if 'setup' in globals():
-                        print("setup is:", globals()['setup'])
                 except Exception as e:
                     import traceback
                     import os
