@@ -10,6 +10,47 @@ let isDirty = localStorage.getItem('py5script_is_dirty') === 'true'; // This mig
 // Actually isDirty is per window session usually, but if we reload we want to know?
 // Let's scope isDirty too: 'project_{id}_dirty'
 
+// --- STORAGE HELPERS ---
+
+/**
+ * Attempts localStorage.setItem and shows a clear error on QuotaExceededError.
+ * Returns true on success, false on failure.
+ */
+function safeSetItem(key, value) {
+    try {
+        localStorage.setItem(key, value);
+        return true;
+    } catch (e) {
+        if (e instanceof DOMException && (
+            e.name === 'QuotaExceededError' ||
+            e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+            e.code === 22 || e.code === 1014
+        )) {
+            const sizeMB = (new Blob([value]).size / (1024 * 1024)).toFixed(2);
+            const used = getLocalStorageUsedMB();
+            alert(
+                `\u26a0\ufe0f Storage quota exceeded!\n\n` +
+                `This project needs ~${sizeMB} MB but the browser storage is full (currently using ~${used} MB).\n\n` +
+                `Try deleting unused projects from the \"Open Project\" dialog to free up space.`
+            );
+        } else {
+            console.error('localStorage.setItem failed:', e);
+            alert(`Failed to save to storage: ${e.message}`);
+        }
+        return false;
+    }
+}
+
+/** Returns approximate total localStorage usage in MB (2 bytes per char). */
+function getLocalStorageUsedMB() {
+    let total = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        total += (key.length + (localStorage.getItem(key) || '').length) * 2;
+    }
+    return (total / (1024 * 1024)).toFixed(2);
+}
+
 // --- REGISTRY HELPERS ---
 function getProjectRegistry() {
     try {
@@ -131,9 +172,9 @@ function saveProjectAndFiles() {
     const keyName = `${PROJECT_KEY_PREFIX}${projectId}_name`;
     const keyDirty = `${PROJECT_KEY_PREFIX}${projectId}_dirty`;
 
-    localStorage.setItem(keyFiles, JSON.stringify(projectFiles));
-    localStorage.setItem(keyName, projectName);
-    localStorage.setItem(keyDirty, isDirty);
+    if (!safeSetItem(keyFiles, JSON.stringify(projectFiles))) return;
+    safeSetItem(keyName, projectName);
+    safeSetItem(keyDirty, isDirty);
     
     // Update Registry
     updateRegistryEntry(projectId, projectName);
@@ -387,9 +428,9 @@ async function loadProjectFromBlob(blob, filenameHint, callbacks = {}, options =
      const keyName = `${PROJECT_KEY_PREFIX}${newId}_name`;
      const keyDirty = `${PROJECT_KEY_PREFIX}${newId}_dirty`;
 
-     localStorage.setItem(keyFiles, JSON.stringify(newProjectFiles));
-     localStorage.setItem(keyName, newProjectName);
-     localStorage.setItem(keyDirty, 'false'); // Clean on import
+     if (!safeSetItem(keyFiles, JSON.stringify(newProjectFiles))) return;
+     safeSetItem(keyName, newProjectName);
+     safeSetItem(keyDirty, 'false'); // Clean on import
 
      // Update Registry (skip for temporary view-only projects)
      if (!skipRegistry) {
