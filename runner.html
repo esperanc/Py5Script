@@ -404,45 +404,62 @@
             hydrated_assets = {}
             if not is_standalone:
                 try:
-                    project_json = None
-                    if project_id:
-                         # New Scoped System
-                         project_json = js.localStorage.getItem(f"project_{project_id}_files")
-                    else:
-                         # Fallback to Legacy (shouldn't happen often)
-                         project_json = js.localStorage.getItem('py5script_project')
+                    project_files_data = None
 
-                    if project_json:
-                        project_files = json.loads(project_json)
-                        for filename, content in project_files.items():
+                    if project_id:
+                        # --- Try IndexedDB first (new storage backend) ---
+                        try:
+                            idb_read = js.eval("""(function(pid) {
+                                return new Promise(function(resolve) {
+                                    var req = indexedDB.open('py5script_db', 1);
+                                    req.onsuccess = function(e) {
+                                        var db = e.target.result;
+                                        if (!db.objectStoreNames.contains('files')) { resolve(null); return; }
+                                        var tx = db.transaction(['files'], 'readonly');
+                                        var gr = tx.objectStore('files').get(pid);
+                                        gr.onsuccess = function() { resolve(gr.result ? gr.result.files : null); };
+                                        gr.onerror   = function() { resolve(null); };
+                                    };
+                                    req.onerror = function() { resolve(null); };
+                                });
+                            })""")
+                            idb_files_js = await idb_read(project_id)
+                            if idb_files_js:
+                                project_files_data = json.loads(js.JSON.stringify(idb_files_js))
+                        except Exception:
+                            pass
+
+                        # --- Fall back to localStorage (legacy) ---
+                        if project_files_data is None:
+                            ls_json = js.localStorage.getItem(f"project_{project_id}_files")
+                            if ls_json:
+                                project_files_data = json.loads(ls_json)
+                    else:
+                        # Very old single-project key
+                        ls_json = js.localStorage.getItem('py5script_project')
+                        if ls_json:
+                            project_files_data = json.loads(ls_json)
+
+                    if project_files_data:
+                        for filename, content in project_files_data.items():
                             try:
-                                # Check if Data URL (Binary/Asset)
                                 if content.startswith('data:'):
-                                    # Decode Data URL
-                                    # Format: data:[mime];base64,[data]
+                                    # Binary asset — decode and write to Pyodide FS
                                     if ',' in content:
                                         _, headerless_data = content.split(',', 1)
                                         binary_data = base64.b64decode(headerless_data)
-                                        
-                                        # Write to FS
                                         with open(filename, 'wb') as f:
                                             f.write(binary_data)
-                                        
-                                        # Add to hydration map for p5 interceptors
                                         hydrated_assets[filename] = content
                                 else:
-                                    # Regular Text File (Module)
+                                    # Text file (module, shader, …) — write and register as data URL
                                     with open(filename, 'w') as f:
                                         f.write(content)
-                                    
-                                    # Register as Data URL for p5 interceptors (loadStrings, loadShader)
-                                    # We treat all text-based assets as text/plain here for simplicity
                                     b64_text = base64.b64encode(content.encode('utf-8')).decode('utf-8')
                                     hydrated_assets[filename] = f"data:text/plain;base64,{b64_text}"
-                            except Exception as inner_e:
-                                # print(f"Error hydrating {filename}: {inner_e}")
+                            except Exception:
                                 pass
-                except Exception as e:
+                except Exception:
                     pass
                 
             if is_standalone:

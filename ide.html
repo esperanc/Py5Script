@@ -143,8 +143,11 @@
 
     <!-- Projects Modal -->
     <div id="projects-modal" class="modal-dialog">
-         <h2 style="margin-top:0;">Open Project</h2>
-         <div id="project-list-container" style="max-height: 300px; overflow-y: auto; margin-bottom: 10px; border: 1px solid #555; background: #222;">
+         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+             <h2 style="margin:0;">Open Project</h2>
+             <button id="sort-toggle-btn" title="Toggle sort order" style="background:#444; border:1px solid #666; color:#ccc; border-radius:4px; padding:4px 10px; cursor:pointer; font-size:0.8em;">Sort: Date</button>
+         </div>
+         <div id="project-list-container" style="max-height: 350px; overflow-y: auto; margin-bottom: 10px; border: 1px solid #555; background: #222;">
              <ul id="project-list" style="list-style: none; padding: 0; margin: 0;"></ul>
          </div>
          <div style="text-align: right;">
@@ -166,9 +169,9 @@
     </div>
 
     <!-- Application Logic -->
-    <script src="js/settings.js?v=3"></script>
-    <script src="js/name_generator.js?v=3"></script>
-    <script src="js/project_manager.js?v=3"></script>
-    <script src="js/ide_ui.js?v=3"></script>
+    <script src="js/settings.js?v=11"></script>
+    <script src="js/name_generator.js?v=11"></script>
+    <script src="js/project_manager.js?v=11"></script>
+    <script src="js/ide_ui.js?v=11"></script>
 </body>
 </html>

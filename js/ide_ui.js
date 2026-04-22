@@ -425,12 +425,11 @@ async function initializeIDE() {
         return;
     }
 
-    // 2. LocalStorage (Scoped) - Already loaded by initProjectID into 'projectFiles' state if found
-    // We just need to check if 'projectFiles' is populated (beyond default empty).
-    // Actually initProjectID tries to populate 'projectFiles'.
-    
-    // Update UI if we have data
-    if (Object.keys(projectFiles).length > 0 && projectFiles['sketch.py']) {
+    // 2. Project loaded from IDB/storage by initProjectID
+    // Show the project if it exists in the registry (saved project), even if sketch.py is empty.
+    // Only fall through to the default template for genuinely new projects.
+    const registry = getProjectRegistry();
+    if (registry[projectId]) {
          updateProjectNameUI();
          updateFileList();
          switchToFile(currentFile, false);
@@ -715,73 +714,95 @@ function closeProjectsModal() {
     document.getElementById('modal-overlay').style.display = 'none';
 }
 
+// Sort preference: 'date' (default) or 'alpha'
+let projectSortOrder = localStorage.getItem('py5script_sort_order') || 'date';
+
+function updateSortToggleLabel() {
+    const btn = document.getElementById('sort-toggle-btn');
+    if (btn) btn.textContent = projectSortOrder === 'date' ? 'Sort: Date' : 'Sort: A–Z';
+}
+
 function renderProjectList() {
     projectList.innerHTML = '';
-    const registry = getProjectRegistry(); // from project_manager.js
+    const registry = getProjectRegistry(); // synchronous localStorage read
     const ids = Object.keys(registry);
-    
-    // Sort by lastModified desc
-    ids.sort((a, b) => (registry[b].lastModified || 0) - (registry[a].lastModified || 0));
-    
+
+    // Sort by chosen order
+    if (projectSortOrder === 'alpha') {
+        ids.sort((a, b) => (registry[a].name || a).localeCompare(registry[b].name || b));
+    } else {
+        ids.sort((a, b) => (registry[b].lastModified || 0) - (registry[a].lastModified || 0));
+    }
+
+    updateSortToggleLabel();
+
     if (ids.length === 0) {
         projectList.innerHTML = '<li style="color:#aaa; padding:10px;">No saved projects.</li>';
         return;
     }
-    
+
     ids.forEach(id => {
-        const p = registry[id];
+        const p  = registry[id];
         const li = document.createElement('li');
-        li.style.padding = '10px';
-        li.style.borderBottom = '1px solid #444';
-        li.style.display = 'flex';
-        li.style.justifyContent = 'space-between';
-        li.style.alignItems = 'center';
-        
-        // Info Div
+        li.style.padding        = '8px 10px';
+        li.style.borderBottom   = '1px solid #333';
+        li.style.display        = 'flex';
+        li.style.alignItems     = 'center';
+        li.style.gap            = '8px';
+        li.style.minWidth       = '0';          // allow flex children to shrink
+
+        // Clickable info area (shrinks, never pushes out the delete button)
         const info = document.createElement('div');
-        info.style.cursor = 'pointer';
-        info.style.flex = '1';
+        info.style.cursor   = 'pointer';
+        info.style.flex     = '1 1 0';          // grow AND shrink
+        info.style.minWidth = '0';              // critical: allows text-overflow to work
         info.onclick = () => {
-            // Open Project
-            console.log(`Opening project: ${p.name} (ID: ${p.id})`);
-            if (p.id === projectId) {
-                alert("This project is already open.");
-                return;
-            }
+            if (p.id === projectId) { alert('This project is already open.'); return; }
             window.location.href = `ide.html?id=${p.id}`;
         };
-        
+
         const name = document.createElement('div');
-        name.style.fontWeight = 'bold';
-        name.style.color = '#fff';
-        name.textContent = p.name || p.id;
-        
+        name.style.fontWeight    = 'bold';
+        name.style.color         = '#fff';
+        name.style.overflow      = 'hidden';
+        name.style.textOverflow  = 'ellipsis';
+        name.style.whiteSpace    = 'nowrap';
+        name.textContent         = p.name || p.id;
+
         const meta = document.createElement('div');
-        meta.style.fontSize = '0.8em';
-        meta.style.color = '#aaa';
-        const date = p.lastModified ? new Date(p.lastModified).toLocaleString() : 'Unknown';
-        meta.textContent = `Last modified: ${date}`;
-        
+        meta.style.fontSize  = '0.75em';
+        meta.style.color     = '#888';
+        meta.style.marginTop = '2px';
+        meta.style.overflow      = 'hidden';
+        meta.style.textOverflow  = 'ellipsis';
+        meta.style.whiteSpace    = 'nowrap';
+        meta.textContent = p.lastModified
+            ? new Date(p.lastModified).toLocaleString()
+            : 'Unknown date';
+
         info.appendChild(name);
         info.appendChild(meta);
         li.appendChild(info);
-        
-        // Delete Button
+
+        // Delete button — always visible, never pushed off screen
         const delBtn = document.createElement('button');
-        delBtn.textContent = '🗑';
+        delBtn.textContent      = '🗑';
+        delBtn.title            = 'Delete project';
+        delBtn.style.flexShrink = '0';          // never shrink
         delBtn.style.background = 'transparent';
-        delBtn.style.border = 'none';
-        delBtn.style.color = '#d9534f';
-        delBtn.style.cursor = 'pointer';
-        delBtn.style.fontSize = '1.2em';
+        delBtn.style.border     = 'none';
+        delBtn.style.color      = '#d9534f';
+        delBtn.style.cursor     = 'pointer';
+        delBtn.style.fontSize   = '1.1em';
+        delBtn.style.padding    = '2px 4px';
         delBtn.onclick = (e) => {
             e.stopPropagation();
             if (confirm(`Delete project "${p.name}"? This cannot be undone.`)) {
-                deleteProjectFromRegistry(p.id); // from project_manager.js
-                renderProjectList(); // Re-render
+                deleteProjectFromRegistry(p.id); // sync registry removal + async IDB cleanup
+                renderProjectList();
             }
         };
-        
+
         li.appendChild(delBtn);
         projectList.appendChild(li);
     });
@@ -789,6 +810,13 @@ function renderProjectList() {
 
 openBtn.addEventListener('click', openProjectsModal);
 closeProjectsBtn.addEventListener('click', closeProjectsModal);
+
+// Sort toggle
+document.getElementById('sort-toggle-btn').addEventListener('click', () => {
+    projectSortOrder = (projectSortOrder === 'date') ? 'alpha' : 'date';
+    localStorage.setItem('py5script_sort_order', projectSortOrder);
+    renderProjectList();
+});
 
 // Update window.onclick to handle projects modal too
 const originalWindowOnClick = window.onclick;

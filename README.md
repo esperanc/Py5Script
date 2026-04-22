@@ -30,9 +30,26 @@ The sidebar on the left displays all files in your current project, including co
 - **Viewing**: Click a file to view/edit it. (Binary files like images are read-only placeholders).
 
 ### Project Management & Storage
-- **Local Storage**: All projects are stored in your browser's `localStorage` using unique IDs (e.g., `project_my-cool-sketch_files`).
-- **Persistence**: Changes are auto-saved to local storage as you type (debounced). Use the "Download" button to export your project to your computer.
-- **Listing**: The "Open" button reads the registry of all saved projects so you can switch between them.
+
+Py5Script uses a **hybrid storage architecture** designed to handle projects of any size without hitting browser quota limits.
+
+| Layer | What is stored | Technology |
+|---|---|---|
+| **Registry** (metadata) | Project ID, name, last-modified timestamp | `localStorage` — synchronous, always reliable |
+| **Files** (content) | `sketch.py`, assets, shaders, images (as Base64) | **IndexedDB** — asynchronous, large-capacity (hundreds of MB) |
+
+- **Auto-save**: Changes are written to IndexedDB automatically as you type (debounced 2 s). The registry in `localStorage` is updated in the same call, so the project list is always consistent.
+- **Large assets**: Images and binary files are stored as Base64 Data URLs in IndexedDB, so there is no practical size limit for individual projects.
+- **Export / Backup**: Use the **Download** button to save a `.py` or `.zip` snapshot of your project to disk. This is the recommended way to keep permanent backups.
+
+#### Migration from older versions
+When you first open the new app, it **automatically migrates** any projects previously saved in the old `localStorage`-only format:
+
+1. The migration scans the registry for projects whose file data is still in `localStorage` (key pattern `project_<id>_files`).
+2. Each project's files are written to IndexedDB and the write is **verified by reading back** before the old `localStorage` key is deleted. If the write cannot be verified, the legacy key is preserved as a fallback.
+3. Migration is **incremental and idempotent** — running it multiple times is safe and it will pick up any new projects created by an older version of the app running at the same origin.
+
+> **Note on browser origins**: `localStorage` and IndexedDB are scoped to the browser origin (`scheme + host + port`). If you run the legacy and new app on different ports (e.g. `:9000` vs `:9005`), migration will not see the legacy data. Run both apps on the **same port** for seamless migration.
 
 ## How It Works
 
@@ -185,7 +202,7 @@ When loaded outside the IDE, `runner.html` enters **Standalone Mode**. It automa
 Standard `p5.js` functions like `P5.loadImage("cat.png")` or `P5.loadStrings("data.csv")` will work seamlessly since they fetch over standard HTTP. However, standard Python basic `open("data.txt")` requires the file to be present in Pyodide's virtual filesystem. It is recommended to stick to `p5.js` native loaders or use `pyodide.http.pyfetch` for raw text data in standalone mode.
 
 ### URL Parameters
-- `?id=<project-id>`: Loads a locally saved project by its ID.
+- `?id=<project-id>`: Loads a project by its ID from IndexedDB.
 - `?sketch=<url>`: Imports a project from an external URL (zip or py).
 - `?code=<lz_string>`: Loads a single-file sketch from the URL hash.
 - `?zip=<base64_lz_string>`: Loads a multi-file project from the URL hash.

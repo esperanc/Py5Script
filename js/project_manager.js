@@ -1,801 +1,729 @@
-// --- STATE ---
-const PROJECT_REGISTRY_KEY = 'py5script_projects_index';
-const PROJECT_KEY_PREFIX = 'project_';
+// =============================================================================
+// PROJECT MANAGER — Hybrid storage: Registry in localStorage, Files in IndexedDB
+// =============================================================================
+// Registry (small metadata: id, name, timestamps) → localStorage, synchronous
+// Files    (large data: sketch code, images, shaders) → IndexedDB, async
+//
+// DB layout (IndexedDB):
+//   "files"  objectStore  keyPath:"id"  → { id, files: { filename → string|dataURL } }
+//
+// localStorage keys:
+//   py5script_projects_index  → JSON registry { [id]: { id, name, lastModified, ... } }
+// =============================================================================
 
-let projectId = null; // Will be set by initProjectID
+const DB_NAME     = 'py5script_db';
+const DB_VERSION  = 1;
+const STORE_FILES = 'files';
+
+// Legacy localStorage constants (kept for migration compatibility)
+const LS_REGISTRY_KEY   = 'py5script_projects_index';
+const LS_PROJECT_PREFIX = 'project_';
+
+// In-memory state
+let projectId    = null;
 let projectFiles = { 'sketch.py': '' };
-let projectName = "My Project";
-let currentFile = 'sketch.py';
-let isDirty = localStorage.getItem('py5script_is_dirty') === 'true'; // This might need scoping too, but let's keep simple for now or scope it? 
-// Actually isDirty is per window session usually, but if we reload we want to know?
-// Let's scope isDirty too: 'project_{id}_dirty'
+let projectName  = 'My Project';
+let currentFile  = 'sketch.py';
+let isDirty      = false;
 
-// --- STORAGE HELPERS ---
+// Shared DB handle
+let _dbPromise = null;
 
-/**
- * Attempts localStorage.setItem and shows a clear error on QuotaExceededError.
- * Returns true on success, false on failure.
- */
-function safeSetItem(key, value) {
-    try {
-        localStorage.setItem(key, value);
-        return true;
-    } catch (e) {
-        if (e instanceof DOMException && (
-            e.name === 'QuotaExceededError' ||
-            e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
-            e.code === 22 || e.code === 1014
-        )) {
-            const sizeMB = (new Blob([value]).size / (1024 * 1024)).toFixed(2);
-            const used = getLocalStorageUsedMB();
-            alert(
-                `\u26a0\ufe0f Storage quota exceeded!\n\n` +
-                `This project needs ~${sizeMB} MB but the browser storage is full (currently using ~${used} MB).\n\n` +
-                `Try deleting unused projects from the \"Open Project\" dialog to free up space.`
-            );
-        } else {
-            console.error('localStorage.setItem failed:', e);
-            alert(`Failed to save to storage: ${e.message}`);
-        }
-        return false;
-    }
+// =============================================================================
+// IDB HELPERS
+// =============================================================================
+function openDB() {
+    if (_dbPromise) return _dbPromise;
+    _dbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+
+        req.onupgradeneeded = (e) => {
+            const db = e.target.result;
+            console.log(`[IDB] onupgradeneeded fired (${e.oldVersion} → ${e.newVersion}). Stores: [${[...db.objectStoreNames].join(', ')}]`);
+            // Only the files store — registry lives in localStorage
+            if (!db.objectStoreNames.contains(STORE_FILES)) {
+                db.createObjectStore(STORE_FILES, { keyPath: 'id' });
+                console.log('[IDB] Created object store: files');
+            }
+            // Remove legacy registry store if it exists from a previous version
+            if (db.objectStoreNames.contains('registry')) {
+                db.deleteObjectStore('registry');
+                console.log('[IDB] Removed legacy object store: registry');
+            }
+        };
+
+        req.onsuccess = (e) => {
+            const db = e.target.result;
+            console.log(`[IDB] Opened successfully. Stores: [${[...db.objectStoreNames].join(', ')}]`);
+            resolve(db);
+        };
+        req.onerror   = (e) => {
+            console.error('[IDB] Open failed:', e.target.error);
+            _dbPromise = null; // allow retry
+            reject(e.target.error);
+        };
+        req.onblocked = () => {
+            console.warn('[IDB] Open blocked — another tab may need to be closed.');
+        };
+    });
+    return _dbPromise;
 }
 
-/** Returns approximate total localStorage usage in MB (2 bytes per char). */
-function getLocalStorageUsedMB() {
-    let total = 0;
-    for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        total += (key.length + (localStorage.getItem(key) || '').length) * 2;
-    }
-    return (total / (1024 * 1024)).toFixed(2);
+function idbGet(key) {
+    return openDB().then(db => new Promise((resolve, reject) => {
+        const tx  = db.transaction(STORE_FILES, 'readonly');
+        const req = tx.objectStore(STORE_FILES).get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror   = () => reject(req.error);
+    }));
 }
 
-// --- REGISTRY HELPERS ---
+// Resolves on tx.oncomplete (fully committed) not req.onsuccess (request done,
+// tx may still be pending). This prevents subsequent reads from seeing stale data.
+function idbPut(value) {
+    return openDB().then(db => new Promise((resolve, reject) => {
+        const tx  = db.transaction(STORE_FILES, 'readwrite');
+        const req = tx.objectStore(STORE_FILES).put(value);
+        tx.oncomplete = () => resolve(req.result);
+        tx.onerror    = () => reject(tx.error);
+        req.onerror   = () => reject(req.error);
+    }));
+}
+
+function idbDelete(key) {
+    return openDB().then(db => new Promise((resolve, reject) => {
+        const tx  = db.transaction(STORE_FILES, 'readwrite');
+        tx.objectStore(STORE_FILES).delete(key);
+        tx.oncomplete = () => resolve();
+        tx.onerror    = () => reject(tx.error);
+    }));
+}
+
+// =============================================================================
+// REGISTRY HELPERS — synchronous, stored in localStorage
+// =============================================================================
 function getProjectRegistry() {
     try {
-        const data = localStorage.getItem(PROJECT_REGISTRY_KEY);
+        const data = localStorage.getItem(LS_REGISTRY_KEY);
         return data ? JSON.parse(data) : {};
     } catch (e) {
-        console.error("Registry parse error", e);
+        console.error('Registry parse error:', e);
         return {};
     }
 }
 
 function saveProjectRegistry(registry) {
-    localStorage.setItem(PROJECT_REGISTRY_KEY, JSON.stringify(registry));
+    try {
+        localStorage.setItem(LS_REGISTRY_KEY, JSON.stringify(registry));
+    } catch (e) {
+        console.warn('Failed to save registry to localStorage:', e);
+    }
 }
 
 function updateRegistryEntry(id, name, lastExported = null) {
     const registry = getProjectRegistry();
     if (!registry[id]) registry[id] = {};
-    
-    registry[id].id = id;
-    registry[id].name = name;
+    registry[id].id           = id;
+    registry[id].name         = name;
     registry[id].lastModified = Date.now();
     if (lastExported) registry[id].lastExported = lastExported;
-    
     saveProjectRegistry(registry);
 }
 
+// Removes the registry entry (sync) and deletes file data from IDB (async, fire-and-forget).
 function deleteProjectFromRegistry(id) {
     const registry = getProjectRegistry();
     if (registry[id]) {
         delete registry[id];
         saveProjectRegistry(registry);
-        
-        // Remove actual data
-        localStorage.removeItem(`${PROJECT_KEY_PREFIX}${id}_files`);
-        localStorage.removeItem(`${PROJECT_KEY_PREFIX}${id}_name`);
-        localStorage.removeItem(`${PROJECT_KEY_PREFIX}${id}_dirty`);
+    }
+    return idbDelete(id).catch(e => console.warn(`IDB delete failed for "${id}":`, e));
+}
+
+// =============================================================================
+// MIGRATION: old per-project localStorage → IndexedDB files
+// =============================================================================
+async function migrateFromLocalStorage() {
+    // Always scan — no one-shot flag. Picks up projects created in older app versions
+    // even after a previous migration has run.
+    const registry = getProjectRegistry();
+    const ids = Object.keys(registry);
+    if (ids.length === 0) return;
+
+    console.log(`[Migration] Found ${ids.length} project(s) in registry: [${ids.join(', ')}]`);
+
+    let migratedCount = 0;
+    for (const id of ids) {
+        const rawFiles = localStorage.getItem(`${LS_PROJECT_PREFIX}${id}_files`);
+        if (!rawFiles) {
+            console.log(`[Migration] "${id}" — no _files LS key, skipping (already migrated or LS cleared).`);
+            continue;
+        }
+
+        try {
+            // Check if already in IDB
+            const existing = await idbGet(id);
+            if (existing && existing.files) {
+                console.log(`[Migration] "${id}" — already in IDB, cleaning up LS keys.`);
+                localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_files`);
+                localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_name`);
+                localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_dirty`);
+                continue;
+            }
+
+            // Parse LS data
+            let files;
+            try {
+                files = JSON.parse(rawFiles);
+            } catch (parseErr) {
+                console.error(`[Migration] "${id}" — JSON.parse failed:`, parseErr);
+                continue;
+            }
+
+            // Write to IDB
+            console.log(`[Migration] "${id}" — writing to IDB (${Object.keys(files).length} files)...`);
+            await idbPut({ id, files });
+
+            // Verify the write by reading back before removing the LS key
+            const verify = await idbGet(id);
+            if (verify && verify.files) {
+                console.log(`[Migration] "${id}" — IDB write verified. Removing LS keys.`);
+                localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_files`);
+                localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_name`);
+                localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_dirty`);
+                migratedCount++;
+            } else {
+                console.error(`[Migration] "${id}" — IDB write could NOT be verified! Keeping LS keys as fallback.`);
+            }
+
+        } catch (e) {
+            console.error(`[Migration] "${id}" — exception:`, e);
+            // Don't remove LS keys — they stay as fallback
+        }
+    }
+
+    // Handle very old single-project key (pre-registry)
+    const legacySingle = localStorage.getItem('py5script_project');
+    if (legacySingle) {
+        const oldName = localStorage.getItem('py5script_project_name') || 'Migrated Project';
+        const slugify = makeSlugify();
+        const id = slugify(oldName) || 'migrated-project';
+        try {
+            const existing = await idbGet(id);
+            if (!existing) {
+                const files = JSON.parse(legacySingle);
+                await idbPut({ id, files });
+                const verify = await idbGet(id);
+                if (verify) {
+                    updateRegistryEntry(id, oldName);
+                    localStorage.removeItem('py5script_project');
+                    localStorage.removeItem('py5script_project_name');
+                    localStorage.removeItem('py5script_is_dirty');
+                }
+            }
+        } catch (e) {
+            console.warn('[Migration] Failed to migrate legacy single project:', e);
+        }
+    }
+
+    if (migratedCount > 0) {
+        console.log(`[Migration] Complete: ${migratedCount} project(s) moved to IndexedDB.`);
     }
 }
 
-
-
-// --- FILE MANAGEMENT ---
-
-// Helper: Check if content is binary (DataURL)
+// =============================================================================
+// FILE MANAGEMENT
+// =============================================================================
 function isBinary(content) {
     return content && content.startsWith('data:');
 }
 
-// Upload Handler
 function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
-    
-    // Check size (Soft warning)
-    if (file.size > 2 * 1024 * 1024) {
-         if(!confirm("File is large (>2MB). This might exceed browser storage limits. Continue?")) {
-             event.target.value = '';
-             return;
-         }
+
+    if (file.size > 10 * 1024 * 1024) {
+        if (!confirm(`File is large (${(file.size / 1024 / 1024).toFixed(1)} MB). Continue?`)) {
+            event.target.value = '';
+            return;
+        }
     }
 
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        let content = e.target.result; // Data URL by default for non-text
-        
-        // If it's a known text type, we might want to read as text? 
-        // FileReader reads as DataURL if we called readAsDataURL.
-        // Let's decide based on extension or just treat everything as DataURL if uploaded?
-        // Better: text files as text, others as data URL.
-        
-        // Actually, for simplicity in "Handle Upload", we read as DataURL for everything?
-        // No, user wants to edit CSV. So we must detect text files.
-    };
+    const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml',
+                      '.gsdict', '.vert', '.frag', '.glsl', '.toml'];
+    const isText   = textExts.some(ext => file.name.toLowerCase().endsWith(ext));
+    const reader   = new FileReader();
 
-    // Re-do Reader Logic based on type
-    const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml', '.gsdict', '.vert', '.frag', '.glsl', '.toml'];
-    const isText = textExts.some(ext => file.name.toLowerCase().endsWith(ext));
-
-    if (isText) {
-        reader.readAsText(file);
-    } else {
-        reader.readAsDataURL(file);
-    }
-
-    reader.onload = function(e) {
-        let content = e.target.result;
-        projectFiles[file.name] = content;
+    reader.onload = (e) => {
+        projectFiles[file.name] = e.target.result;
         isDirty = true;
         saveProjectAndFiles();
         if (typeof updateFileList === 'function') updateFileList();
-        event.target.value = ''; 
+        event.target.value = '';
     };
+
+    isText ? reader.readAsText(file) : reader.readAsDataURL(file);
 }
 
-// --- PROJECT SAVE/LOAD ---
-
-// Helper: Get code from Editor if available, else from memory
+// =============================================================================
+// PROJECT SAVE / LOAD
+// =============================================================================
 function getCurrentCode() {
     if (typeof editor !== 'undefined' && editor.getValue && !isBinary(projectFiles[currentFile])) {
         return editor.getValue();
     }
-    return projectFiles[currentFile] || "";
+    return projectFiles[currentFile] || '';
 }
 
-function saveProjectAndFiles() {
+async function saveProjectAndFiles() {
     if (!projectId) {
-        console.warn("No Project ID set, skipping save.");
+        console.warn('No Project ID set, skipping save.');
         return;
     }
 
-    // If editor exists and current file is text, sync it
+    // Sync editor content
     if (typeof editor !== 'undefined' && editor.getValue && !isBinary(projectFiles[currentFile])) {
         projectFiles[currentFile] = editor.getValue();
     }
-    
-    // Save to Scoped Storage
-    const keyFiles = `${PROJECT_KEY_PREFIX}${projectId}_files`;
-    const keyName = `${PROJECT_KEY_PREFIX}${projectId}_name`;
-    const keyDirty = `${PROJECT_KEY_PREFIX}${projectId}_dirty`;
 
-    if (!safeSetItem(keyFiles, JSON.stringify(projectFiles))) return;
-    safeSetItem(keyName, projectName);
-    safeSetItem(keyDirty, isDirty);
-    
-    // Update Registry
-    updateRegistryEntry(projectId, projectName);
+    try {
+        await idbPut({ id: projectId, files: projectFiles });
+        updateRegistryEntry(projectId, projectName); // sync
+    } catch (e) {
+        console.error('saveProjectAndFiles error:', e);
+        alert(`Failed to save project: ${e.message}`);
+    }
 
     if (typeof updateProjectNameUI === 'function') updateProjectNameUI();
 }
 
-// Rename Project and Migrate ID
-function renameProject(newName) {
+// --- Rename ---
+async function renameProject(newName) {
     if (!newName || !newName.trim()) return;
-    
-    // Slugify helper
-    const slugify = (text) => text.toString().toLowerCase()
-        .replace(/\s+/g, '-')           
-        .replace(/[^\w\-]+/g, '')       
-        .replace(/\-\-+/g, '-')         
-        .replace(/^-+/, '')             
-        .replace(/-+$/, '');
-        
-    const newId = slugify(newName);
-    
-    if (!newId) {
-        alert("Invalid project name.");
-        return;
-    }
-    
-    // Case only change?
+    const slugify = makeSlugify();
+    const newId   = slugify(newName);
+    if (!newId) { alert('Invalid project name.'); return; }
+
     if (newId === projectId) {
         projectName = newName;
         isDirty = true;
-        saveProjectAndFiles();
+        await saveProjectAndFiles();
         return;
     }
-    
-    // Check Collision
+
     const registry = getProjectRegistry();
     if (registry[newId]) {
-        alert(`Project "${newName}" (ID: ${newId}) already exists. Please choose another name.`);
+        alert(`Project "${newName}" already exists. Please choose another name.`);
         return;
     }
-    
-    if (!confirm(`This will rename the project ID to "${newId}" and reload. Continue?`)) return;
-    
-    // MIGRATE DATA
-    // We already have 'projectFiles', 'isDirty' in memory.
-    // Just save to NEW keys and delete OLD keys.
-    
-    // 1. Save to New ID
+    if (!confirm(`This will rename the project to "${newId}" and reload. Continue?`)) return;
+
     const oldId = projectId;
-    const keyFilesNew = `${PROJECT_KEY_PREFIX}${newId}_files`;
-    const keyNameNew = `${PROJECT_KEY_PREFIX}${newId}_name`;
-    const keyDirtyNew = `${PROJECT_KEY_PREFIX}${newId}_dirty`;
 
-    localStorage.setItem(keyFilesNew, JSON.stringify(projectFiles));
-    localStorage.setItem(keyNameNew, newName);
-    localStorage.setItem(keyDirtyNew, isDirty);
-    
-    // 2. Update Registry (Add New, Delete Old)
-    updateRegistryEntry(newId, newName);
-    deleteProjectFromRegistry(oldId);
-    
-    // 3. Redirect
-    window.location.href = `ide.html?id=${newId}`;
-}
-
-// Create a copy of the project under a new name/ID
-function saveProjectAs(newName) {
-    if (!newName || !newName.trim()) return;
-    
-    // Slugify helper
-    const slugify = (text) => text.toString().toLowerCase()
-        .replace(/\s+/g, '-')           
-        .replace(/[^\w\-]+/g, '')       
-        .replace(/\-\-+/g, '-')         
-        .replace(/^-+/, '')             
-        .replace(/-+$/, '');
-        
-    const newId = slugify(newName);
-    
-    if (!newId) {
-        alert("Invalid project name.");
-        return;
-    }
-    
-    if (newId === projectId) {
-        alert("Please choose a different name for 'Save As'.");
-        return;
-    }
-    
-    // Check Collision
-    const registry = getProjectRegistry();
-    if (registry[newId]) {
-        alert(`Project "${newName}" (ID: ${newId}) already exists. Please choose another name.`);
-        return;
-    }
-
-    // Sync editor content if available
+    // Sync editor
     if (typeof editor !== 'undefined' && editor.getValue && !isBinary(projectFiles[currentFile])) {
         projectFiles[currentFile] = editor.getValue();
     }
-    
-    // SAVE TO NEW ID
-    const keyFilesNew = `${PROJECT_KEY_PREFIX}${newId}_files`;
-    const keyNameNew = `${PROJECT_KEY_PREFIX}${newId}_name`;
-    const keyDirtyNew = `${PROJECT_KEY_PREFIX}${newId}_dirty`;
 
-    localStorage.setItem(keyFilesNew, JSON.stringify(projectFiles));
-    localStorage.setItem(keyNameNew, newName);
-    localStorage.setItem(keyDirtyNew, 'false'); // Copy is clean
-    
-    // Update Registry (Add New)
+    await idbPut({ id: newId, files: projectFiles });
     updateRegistryEntry(newId, newName);
-    
-    // Redirect
+    deleteProjectFromRegistry(oldId); // also deletes old IDB entry
+
     window.location.href = `ide.html?id=${newId}`;
 }
 
-// Check Dirty before action
+// --- Save As ---
+async function saveProjectAs(newName) {
+    if (!newName || !newName.trim()) return;
+    const slugify = makeSlugify();
+    const newId   = slugify(newName);
+    if (!newId)           { alert('Invalid project name.'); return; }
+    if (newId === projectId) { alert('Please choose a different name for "Save As".'); return; }
+
+    const registry = getProjectRegistry();
+    if (registry[newId]) {
+        alert(`Project "${newName}" already exists. Please choose another name.`);
+        return;
+    }
+
+    if (typeof editor !== 'undefined' && editor.getValue && !isBinary(projectFiles[currentFile])) {
+        projectFiles[currentFile] = editor.getValue();
+    }
+
+    await idbPut({ id: newId, files: { ...projectFiles } });
+    updateRegistryEntry(newId, newName);
+
+    window.location.href = `ide.html?id=${newId}`;
+}
+
+// --- Dirty check ---
 function checkDirty() {
     if (isDirty) {
-        return confirm("You have unsaved changes. They will be lost if you proceed. Continue?");
+        return confirm('You have unsaved changes. They will be lost if you proceed. Continue?');
     }
     return true;
 }
 
+// =============================================================================
+// IMPORT FROM BLOB (ZIP or .py)
+// =============================================================================
 async function loadProjectFromBlob(blob, filenameHint, callbacks = {}, options = {}) {
-     // options: { redirect: boolean (default true), skipRegistry: boolean (default false) }
-     const shouldRedirect = options.redirect !== false;
-     const skipRegistry = options.skipRegistry === true;
-
-     // callbacks: { onImport: (msg)=>void, onError: (msg)=>void, onUpdateUI: ()=>void }
-     const log = callbacks.onImport || console.log;
-     const err = callbacks.onError || console.error;
-
-
-
-     // We don't check dirty on upload anymore because we are NOT overwriting the current project.
-     // We are creating a NEW project.
-     
-     if (!blob) return;
-
-     let newProjectFiles = {};
-     let newProjectName = "Imported Project";
-
-     if (filenameHint.endsWith('.zip')) {
-         // ZIP Import
-         try {
-             const zip = await JSZip.loadAsync(blob);
-             let foundPy = false;
-             
-             for (const filename in zip.files) {
-                 if (zip.files[filename].dir) continue;
-                 
-                 const file = zip.file(filename);
-                 // Heuristic: .py, .txt, .csv, .json, .md, .xml, .yaml, .gsdict, .vert, .frag, .glsl -> String
-                 const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml', '.gsdict', '.vert', '.frag', '.glsl', '.toml'];
-                 const isText = textExts.some(ext => filename.toLowerCase().endsWith(ext));
-
-                 if (isText) {
-                     newProjectFiles[filename] = await file.async("string");
-                 } else {
-                     const b64 = await file.async("base64");
-                     let mime = 'application/octet-stream';
-                     if (filename.endsWith('.png')) mime = 'image/png';
-                     else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) mime = 'image/jpeg';
-                     else if (filename.endsWith('.gif')) mime = 'image/gif';
-                     
-                     newProjectFiles[filename] = `data:${mime};base64,${b64}`;
-                 }
-                 
-                 if (filename.endsWith('.py')) foundPy = true;
-             }
-
-             if (foundPy) {
-                 // ENFORCE sketch.py
-                 if (!newProjectFiles['sketch.py']) {
-                     const keys = Object.keys(newProjectFiles);
-                     if (newProjectFiles['main.py']) {
-                         newProjectFiles['sketch.py'] = newProjectFiles['main.py'];
-                         delete newProjectFiles['main.py'];
-                     } else {
-                         // Find first py
-                         const pyFile = keys.find(k => k.endsWith('.py'));
-                         if (pyFile) {
-                             newProjectFiles['sketch.py'] = newProjectFiles[pyFile];
-                             delete newProjectFiles[pyFile];
-                         }
-                     }
-                 }
-                 if (!newProjectFiles['sketch.py']) newProjectFiles['sketch.py'] = "";
-
-                 // Name from ZIP
-                 newProjectName = filenameHint.replace(/\.zip$/i, '');
-             } else {
-                 err("Warning: No python file found in ZIP.");
-                 // Still proceed? Yes, maybe just assets.
-                 if (!newProjectFiles['sketch.py']) newProjectFiles['sketch.py'] = "";
-                 newProjectName = filenameHint.replace(/\.zip$/i, '');
-             }
-
-         } catch(e) {
-             console.error("ZIP Import Error:", e);
-             alert(`Error reading ZIP file: ${e.message}`);
-             return;
-         }
-     } else {
-         // Single File Import
-         const text = await blob.text();
-         newProjectFiles = {}; 
-         newProjectFiles['sketch.py'] = text;
-         
-         // Name from filename
-         if (filenameHint && filenameHint !== 'sketch.py') {
-             const name = filenameHint.replace(/\.[^/.]+$/, "");
-             if (name.trim() !== "") {
-                 newProjectName = name;
-             }
-         } else {
-            newProjectName = "My Sketch";
-         }
-         console.log("Importing Text Project:", newProjectName, "from", filenameHint);
-     }
-
-     // --- SAVE AS NEW PROJECT ---
-     const slugify = (text) => text.toString().toLowerCase()
-        .replace(/\s+/g, '-')           
-        .replace(/[^\w\-]+/g, '')       
-        .replace(/\-\-+/g, '-')         
-        .replace(/^-+/, '')             
-        .replace(/-+$/, '');
-
-     let newId = slugify(newProjectName);
-     if (!newId) newId = "imported-project-" + Date.now();
-
-     // Handle Collision (Auto-Increment)
-     const registry = getProjectRegistry();
-     let counter = 1;
-     let originalId = newId;
-     while (registry[newId]) {
-         newId = `${originalId}-${counter}`;
-         counter++;
-     }
-     if (newId !== originalId) {
-         newProjectName = `${newProjectName} (${counter - 1})`;
-     }
-
-     console.log(`Importing as: ${newProjectName} (ID: ${newId})`);
-
-     // Save to Storage
-     const keyFiles = `${PROJECT_KEY_PREFIX}${newId}_files`;
-     const keyName = `${PROJECT_KEY_PREFIX}${newId}_name`;
-     const keyDirty = `${PROJECT_KEY_PREFIX}${newId}_dirty`;
-
-     if (!safeSetItem(keyFiles, JSON.stringify(newProjectFiles))) return;
-     safeSetItem(keyName, newProjectName);
-     safeSetItem(keyDirty, 'false'); // Clean on import
-
-     // Update Registry (skip for temporary view-only projects)
-     if (!skipRegistry) {
-         updateRegistryEntry(newId, newProjectName);
-     }
-
-     // Callback before redirect?
-     if (callbacks.onImport) callbacks.onImport(`Project imported as ${newProjectName}.`);
-
-     // Redirect
-     if (shouldRedirect) {
-         window.location.href = `ide.html?id=${newId}`;
-     } else {
-        // Hydrate in-place
-        projectId = newId;
-        projectName = newProjectName;
-        projectFiles = newProjectFiles;
-        isDirty = false;
-        
-        // Ensure currentFile is valid
-        if (!projectFiles[currentFile]) {
-             const keys = Object.keys(projectFiles);
-             if (keys.length > 0) currentFile = keys[0];
-             else currentFile = 'sketch.py';
-        }
-     }
-}
-
-// --- EXPORT ---
-// --- EXPORT ---
-function triggerExport() {
-     console.log("Export triggered...");
-     try {
-         // Sync editor content first
-         if (typeof editor !== 'undefined' && editor.getValue && !isBinary(projectFiles[currentFile])) {
-            projectFiles[currentFile] = editor.getValue();
-         }
-
-         const fileKeys = Object.keys(projectFiles);
-         if (fileKeys.length === 0) {
-             alert("Project is empty!");
-             return;
-         }
-
-         // Update Last Exported Timestamp
-         updateRegistryEntry(projectId, projectName, Date.now());
-
-         // Single File Export (.py)
-         if (fileKeys.length === 1 && fileKeys[0] === 'sketch.py') {
-             console.log("Exporting single .py file");
-             const content = projectFiles['sketch.py'];
-             const blob = new Blob([content], {type: "text/plain;charset=utf-8"});
-             
-             const a = document.createElement("a");
-             a.href = URL.createObjectURL(blob);
-             a.download = `${projectName}.py`;
-             document.body.appendChild(a); // Append to body to ensure click works in some browsers
-             a.click();
-             document.body.removeChild(a);
-             URL.revokeObjectURL(a.href);
-             
-             isDirty = false;
-             saveProjectAndFiles();
-             return;
-         }
-
-         // ZIP Export (Multiple files or non-sketch files)
-         console.log("Exporting ZIP...");
-         if (typeof JSZip === 'undefined') {
-             alert("JSZip library not loaded!");
-             return;
-         }
-         const zip = new JSZip();
-
-         // Add All Project Files
-         for (const filename in projectFiles) {
-             const content = projectFiles[filename];
-             if (isBinary(content)) {
-                 // data:mime;base64,...
-                 const parts = content.split(',');
-                 if (parts.length === 2) {
-                     zip.file(filename, parts[1], {base64: true});
-                 } else {
-                     zip.file(filename, content);
-                 }
-             } else {
-                 zip.file(filename, content);
-             }
-         }
-         
-         // Generate and download
-         zip.generateAsync({type:"blob"}).then(function(content) {
-             const a = document.createElement("a");
-             a.href = URL.createObjectURL(content);
-             a.download = `${projectName}.zip`;
-             document.body.appendChild(a);
-             a.click();
-             document.body.removeChild(a);
-             URL.revokeObjectURL(a.href);
-             
-             isDirty = false; // Saved
-             saveProjectAndFiles(); // Persist clean state
-             console.log("Export complete.");
-         }).catch(err => {
-             console.error("ZIP Generation Error:", err);
-             alert("Failed to generate ZIP: " + err.message);
-         });
-     } catch(e) {
-         console.error("Export Error:", e);
-         alert("Export failed: " + e.message);
-     }
-}
-// --- URL LOADING ---
-async function loadProjectFromURL(callbacks = {}) {
-    // callbacks: { onImport, onError, onUpdateUI, onLoaded }
+    const shouldRedirect = options.redirect !== false;
+    const skipRegistry   = options.skipRegistry === true;
     const log = callbacks.onImport || console.log;
-    const err = callbacks.onError || console.error;
-    const params = new URLSearchParams(window.location.search);
-    let loaded = false;
+    const err = callbacks.onError  || console.error;
 
-    // Helper to resolve collisions
+    if (!blob) return;
+
+    let newProjectFiles = {};
+    let newProjectName  = 'Imported Project';
+
+    if (filenameHint.endsWith('.zip')) {
+        try {
+            const zip      = await JSZip.loadAsync(blob);
+            const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml',
+                              '.gsdict', '.vert', '.frag', '.glsl', '.toml'];
+            let foundPy    = false;
+
+            for (const filename in zip.files) {
+                if (zip.files[filename].dir) continue;
+                const file   = zip.file(filename);
+                const isText = textExts.some(ext => filename.toLowerCase().endsWith(ext));
+
+                if (isText) {
+                    newProjectFiles[filename] = await file.async('string');
+                } else {
+                    const b64 = await file.async('base64');
+                    let mime  = 'application/octet-stream';
+                    if (filename.endsWith('.png'))                               mime = 'image/png';
+                    else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) mime = 'image/jpeg';
+                    else if (filename.endsWith('.gif'))                          mime = 'image/gif';
+                    newProjectFiles[filename] = `data:${mime};base64,${b64}`;
+                }
+                if (filename.endsWith('.py')) foundPy = true;
+            }
+
+            // Enforce sketch.py entry point
+            if (!newProjectFiles['sketch.py']) {
+                const pyFile = Object.keys(newProjectFiles).find(k => k === 'main.py') ||
+                               Object.keys(newProjectFiles).find(k => k.endsWith('.py'));
+                if (pyFile) {
+                    newProjectFiles['sketch.py'] = newProjectFiles[pyFile];
+                    delete newProjectFiles[pyFile];
+                }
+            }
+            if (!newProjectFiles['sketch.py']) newProjectFiles['sketch.py'] = '';
+            if (!foundPy) err('Warning: No Python file found in ZIP.');
+            newProjectName = filenameHint.replace(/\.zip$/i, '');
+
+        } catch (e) {
+            console.error('ZIP Import Error:', e);
+            alert(`Error reading ZIP file: ${e.message}`);
+            return;
+        }
+    } else {
+        const text = await blob.text();
+        newProjectFiles = { 'sketch.py': text };
+        newProjectName  = (filenameHint && filenameHint !== 'sketch.py')
+            ? filenameHint.replace(/\.[^/.]+$/, '') || 'My Sketch'
+            : 'My Sketch';
+    }
+
+    // Resolve ID + collisions
+    const slugify    = makeSlugify();
+    let newId        = slugify(newProjectName) || ('imported-' + Date.now());
+    const registry   = getProjectRegistry();
+    const originalId = newId;
+    let counter      = 1;
+    while (registry[newId]) { newId = `${originalId}-${counter}`; counter++; }
+    if (newId !== originalId) newProjectName = `${newProjectName} (${counter - 1})`;
+
+    try {
+        await idbPut({ id: newId, files: newProjectFiles });
+        if (!skipRegistry) updateRegistryEntry(newId, newProjectName);
+    } catch (e) {
+        console.error('Failed to save imported project:', e);
+        alert(`Failed to save imported project: ${e.message}`);
+        return;
+    }
+
+    if (callbacks.onImport) callbacks.onImport(`Project imported as "${newProjectName}".`);
+
+    if (shouldRedirect) {
+        window.location.href = `ide.html?id=${newId}`;
+    } else {
+        projectId    = newId;
+        projectName  = newProjectName;
+        projectFiles = newProjectFiles;
+        isDirty      = false;
+        if (!projectFiles[currentFile]) {
+            const keys = Object.keys(projectFiles);
+            currentFile = keys.length > 0 ? keys[0] : 'sketch.py';
+        }
+    }
+}
+
+// =============================================================================
+// EXPORT (Download)
+// =============================================================================
+function triggerExport() {
+    try {
+        if (typeof editor !== 'undefined' && editor.getValue && !isBinary(projectFiles[currentFile])) {
+            projectFiles[currentFile] = editor.getValue();
+        }
+
+        const fileKeys = Object.keys(projectFiles);
+        if (fileKeys.length === 0) { alert('Project is empty!'); return; }
+
+        updateRegistryEntry(projectId, projectName, Date.now());
+
+        if (fileKeys.length === 1 && fileKeys[0] === 'sketch.py') {
+            const blob = new Blob([projectFiles['sketch.py']], { type: 'text/plain;charset=utf-8' });
+            const a    = document.createElement('a');
+            a.href     = URL.createObjectURL(blob);
+            a.download = `${projectName}.py`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+            isDirty = false;
+            saveProjectAndFiles();
+            return;
+        }
+
+        if (typeof JSZip === 'undefined') { alert('JSZip library not loaded!'); return; }
+        const zip = new JSZip();
+        for (const filename in projectFiles) {
+            const content = projectFiles[filename];
+            if (isBinary(content)) {
+                const parts = content.split(',');
+                if (parts.length === 2) zip.file(filename, parts[1], { base64: true });
+                else                    zip.file(filename, content);
+            } else {
+                zip.file(filename, content);
+            }
+        }
+
+        zip.generateAsync({ type: 'blob' }).then(zblob => {
+            const a    = document.createElement('a');
+            a.href     = URL.createObjectURL(zblob);
+            a.download = `${projectName}.zip`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+            isDirty = false;
+            saveProjectAndFiles();
+        }).catch(e => alert('Failed to generate ZIP: ' + e.message));
+
+    } catch (e) {
+        alert('Export failed: ' + e.message);
+    }
+}
+
+// =============================================================================
+// URL LOADING (?code, ?zip, ?sketch)
+// =============================================================================
+async function loadProjectFromURL(callbacks = {}) {
+    const log    = callbacks.onImport || console.log;
+    const err    = callbacks.onError  || console.error;
+    const params = new URLSearchParams(window.location.search);
+    let   loaded = false;
+
     const resolveCollision = (name) => {
         const registry = getProjectRegistry();
-        const slugify = (text) => text.toString().toLowerCase()
-            .replace(/\s+/g, '-')           
-            .replace(/[^\w\-]+/g, '')       
-            .replace(/\-\-+/g, '-')         
-            .replace(/^-+/, '')             
-            .replace(/-+$/, '');
-
-        let id = slugify(name);
+        const slugify  = makeSlugify();
+        let   id       = slugify(name);
         if (registry[id]) {
-            if (confirm(`A project named "${name}" already exists. Overwrite existing project?\n\nClick Cancel to create a copy instead.`)) {
-                return { id, name }; // Overwrite
+            if (confirm(`A project named "${name}" already exists. Overwrite it?\n\nClick Cancel to create a copy instead.`)) {
+                return { id, name };
             } else {
                 let counter = 1;
-                let baseName = name;
-                while (registry[slugify(`${baseName} (${counter})`)]) {
-                    counter++;
-                }
-                const finalName = `${baseName} (${counter})`;
+                while (registry[slugify(`${name} (${counter})`)]) counter++;
+                const finalName = `${name} (${counter})`;
                 return { id: slugify(finalName), name: finalName };
             }
         }
         return { id, name };
     };
 
-    // 1. URL Code String (?code=...)
+    // 1. ?code=
     if (params.has('code')) {
-        const compressed = params.get('code');
-        const code = LZString.decompressFromEncodedURIComponent(compressed);
+        const code = LZString.decompressFromEncodedURIComponent(params.get('code'));
         if (code) {
-             const sharedName = params.get('name') || "Shared Project";
-             const resolved = resolveCollision(sharedName);
-             
-             projectId = resolved.id;
-             projectName = resolved.name;
-             projectFiles = { 'sketch.py': code };
-             currentFile = 'sketch.py';
-             loaded = true;
+            const resolved = resolveCollision(params.get('name') || 'Shared Project');
+            projectId    = resolved.id;
+            projectName  = resolved.name;
+            projectFiles = { 'sketch.py': code };
+            currentFile  = 'sketch.py';
+            loaded = true;
         }
     }
 
-    // 2. URL ZIP Base64 (?zip=...)
-    if (params.has('zip')) {
-        const compressed = params.get('zip');
-        const base64 = LZString.decompressFromEncodedURIComponent(compressed);
+    // 2. ?zip=
+    if (!loaded && params.has('zip')) {
+        const base64 = LZString.decompressFromEncodedURIComponent(params.get('zip'));
         if (base64) {
-             try {
-                 const zip = await JSZip.loadAsync(base64, {base64: true});
-                 // Reuse logic similar to ZIP import
-                 const newProjectFiles = {}; 
-                 
-                 for (const filename in zip.files) {
-                     if (zip.files[filename].dir) continue;
-                     
-                     const file = zip.file(filename);
-                     const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml', '.gsdict', '.vert', '.frag', '.glsl', '.toml'];
-                     const isText = textExts.some(ext => filename.toLowerCase().endsWith(ext));
-    
-                     if (isText) {
-                         newProjectFiles[filename] = await file.async("string");
-                     } else {
-                         const b64 = await file.async("base64");
-                         let mime = 'application/octet-stream';
-                         if (filename.endsWith('.png')) mime = 'image/png';
-                         else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) mime = 'image/jpeg';
-                         else if (filename.endsWith('.gif')) mime = 'image/gif';
-                         
-                         newProjectFiles[filename] = `data:${mime};base64,${b64}`;
-                     }
-                 }
-                 
-                 const sharedName = params.get('name') || "Shared Project";
-                 const resolved = resolveCollision(sharedName);
-                 
-                 projectId = resolved.id;
-                 projectName = resolved.name;
-                 projectFiles = newProjectFiles;
-                 
-                 currentFile = 'sketch.py';
-                 if (!projectFiles['sketch.py']) {
-                      const keys = Object.keys(projectFiles);
-                      if (keys.length > 0) currentFile = keys[0];
-                 }
-                 loaded = true;
-             } catch(e) {
-                 err(`Error decompressing ZIP URL: ${e}`);
-             }
+            try {
+                const zip            = await JSZip.loadAsync(base64, { base64: true });
+                const newProjectFiles = {};
+                const textExts        = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml',
+                                         '.gsdict', '.vert', '.frag', '.glsl', '.toml'];
+                for (const filename in zip.files) {
+                    if (zip.files[filename].dir) continue;
+                    const file   = zip.file(filename);
+                    const isText = textExts.some(ext => filename.toLowerCase().endsWith(ext));
+                    if (isText) {
+                        newProjectFiles[filename] = await file.async('string');
+                    } else {
+                        const b64 = await file.async('base64');
+                        let mime  = 'application/octet-stream';
+                        if (filename.endsWith('.png'))                               mime = 'image/png';
+                        else if (filename.endsWith('.jpg') || filename.endsWith('.jpeg')) mime = 'image/jpeg';
+                        else if (filename.endsWith('.gif'))                          mime = 'image/gif';
+                        newProjectFiles[filename] = `data:${mime};base64,${b64}`;
+                    }
+                }
+                const resolved = resolveCollision(params.get('name') || 'Shared Project');
+                projectId    = resolved.id;
+                projectName  = resolved.name;
+                projectFiles = newProjectFiles;
+                currentFile  = projectFiles['sketch.py'] ? 'sketch.py' : (Object.keys(projectFiles)[0] || 'sketch.py');
+                loaded = true;
+            } catch (e) { err(`Error decompressing ZIP URL: ${e}`); }
         }
     }
 
-    // 3. URL Sketch/Project File (?sketch=...)
+    // 3. ?sketch=
     else if (params.has('sketch')) {
         const sketchUrl = params.get('sketch');
-        const filename = sketchUrl.split('/').pop() || 'sketch.py';
+        const filename  = sketchUrl.split('/').pop() || 'sketch.py';
         try {
-            if (sketchUrl.toLowerCase().endsWith('.zip')) {
-                 const response = await fetch(sketchUrl);
-                 if (response.ok) {
-                     const blob = await response.blob();
-                     await loadProjectFromBlob(blob, filename, callbacks, { redirect: false, skipRegistry: callbacks.skipRegistry });
-                     loaded = true;
-                     // removed early return to allow onLoaded callback below
-                 }
+            const response = await fetch(sketchUrl);
+            if (response.ok) {
+                const blob = await response.blob();
+                await loadProjectFromBlob(blob, filename, callbacks,
+                    { redirect: false, skipRegistry: callbacks.skipRegistry });
+                loaded = true;
             } else {
-                 const response = await fetch(sketchUrl);
-                 if (response.ok) {
-                    const text = await response.text();
-                    // Similar logic to loadProjectFromBlob text import but manual here for simplicity? 
-                    // Or reuse loadProjectFromBlob?
-                    // Let's reuse loadProjectFromBlob for text too
-                    const blob = new Blob([text], {type: 'text/plain'});
-                    await loadProjectFromBlob(blob, filename, callbacks, { redirect: false, skipRegistry: callbacks.skipRegistry });
-                    loaded = true;
-                 } else {
-                    err(`Failed to fetch sketch: ${sketchUrl} (${response.status})`);
-                 }
+                err(`Failed to fetch sketch: ${sketchUrl} (${response.status})`);
             }
-        } catch(e) {
-            err(`Error fetching sketch: ${e.message}`);
-        }
+        } catch (e) { err(`Error fetching sketch: ${e.message}`); }
     }
 
     if (loaded) {
         if (callbacks.onUpdateUI) callbacks.onUpdateUI();
-        if (callbacks.onLoaded) callbacks.onLoaded();
+        if (callbacks.onLoaded)   callbacks.onLoaded();
     }
     return loaded;
 }
 
+// =============================================================================
+// NEW PROJECT
+// =============================================================================
 async function newProject() {
-    // Just redirect to a fresh URL with a new ID
-    // We don't check dirty here because we're opening a "new" clean project in a way (or same window)
-    // Actually users expect "New" to replace current if single window.
     if (!checkDirty()) return;
-    
-    const newName = generateProjectName(); // from name_generator.js
-    // We rely on slug as ID for simplicity as per plan
-    const newId = newName; 
-    
-    // Redirect
-    window.location.href = `ide.html?id=${newId}`;
+    window.location.href = `ide.html?id=${generateProjectName()}`;
 }
 
-// --- INITIALIZATION (ID & Migration) ---
+// =============================================================================
+// INITIALIZATION
+// =============================================================================
 async function initProjectID() {
-    const params = new URLSearchParams(window.location.search);
+    // Run migration (always, idempotent)
+    await migrateFromLocalStorage();
+
+    const params  = new URLSearchParams(window.location.search);
     const idParam = params.get('id');
-    
+
     if (idParam) {
         projectId = idParam;
-        
-        // Try to load scoped data
-        const keyFiles = `${PROJECT_KEY_PREFIX}${projectId}_files`;
-        const keyName = `${PROJECT_KEY_PREFIX}${projectId}_name`;
-        const keyDirty = `${PROJECT_KEY_PREFIX}${projectId}_dirty`; // Optional loading
-        
-        const savedFiles = localStorage.getItem(keyFiles);
-        const savedName = localStorage.getItem(keyName);
-        
-        if (savedFiles) {
+
+        // --- 1. Try IndexedDB (primary store) ---
+        let loadedFromDB = false;
+        try {
+            const rec = await idbGet(projectId);
+            if (rec && rec.files) {
+                projectFiles  = rec.files;
+                isDirty       = false;
+                loadedFromDB  = true;
+            }
+        } catch (e) {
+            console.error('IDB read failed in initProjectID:', e);
+        }
+
+        // --- 2. Fallback: localStorage _files key (in case migration didn't run or failed) ---
+        if (!loadedFromDB) {
             try {
-                projectFiles = JSON.parse(savedFiles);
-                if (savedName) projectName = savedName;
-                isDirty = false; // Reset dirty on fresh load unless we tracking session crash?
-                // Let's assume clean load
-            } catch(e) {
-                console.error("Error loading project files", e);
+                const rawFiles = localStorage.getItem(`${LS_PROJECT_PREFIX}${projectId}_files`);
+                if (rawFiles) {
+                    console.warn(`[initProjectID] "${projectId}" not in IDB — loading from localStorage fallback.`);
+                    const files = JSON.parse(rawFiles);
+                    projectFiles = files;
+                    isDirty = true;
+                    // Write to IDB now so future loads use IDB
+                    await idbPut({ id: projectId, files });
+                    localStorage.removeItem(`${LS_PROJECT_PREFIX}${projectId}_files`);
+                    localStorage.removeItem(`${LS_PROJECT_PREFIX}${projectId}_name`);
+                } else {
+                    // --- 3. Orphan detection ---
+                    // Registry has this project but neither IDB nor LS has file data.
+                    // This was caused by a previous buggy migration that removed the LS
+                    // _files key before confirming the IDB write succeeded.
+                    // The project data is gone. Remove the orphan registry entry so
+                    // the project list doesn't show a ghost that always loads as template.
+                    const registry = getProjectRegistry();
+                    if (registry[projectId]) {
+                        console.error(`[initProjectID] "${projectId}" is an orphan — data gone from both IDB and LS. Removing registry entry.`);
+                        deleteProjectFromRegistry(projectId);
+                    }
+                }
+            } catch (e) {
+                console.warn('[initProjectID] localStorage fallback failed:', e);
             }
-        } else {
-            // ID exists in URL but no data? 
-            // 1. Could be a totally new project with a custom name user typed?
-            // 2. Could be valid.
-            // Initialize empty.
-            // If the ID looks like it came from us (adjective-noun), nice.
-            // Just init defaults.
-            // We do NOT fetch default sketch here, initializeIDE does that fallback.
-            
-            // Set name from ID if looks reasonable (replace - with space, capitalize)
-            // Or just keep ID as name initially?
-            // Let's set projectName to title-cased ID if it's new
-            const readable = projectId.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
-            projectName = readable;
-            // projectFiles initialized empty/default later in initializeIDE fallback
         }
-        
+
+        // --- Load name from registry (sync) ---
+        const registry = getProjectRegistry();
+        if (registry[projectId] && registry[projectId].name) {
+            projectName = registry[projectId].name;
+        } else if (!registry[projectId]) {
+            // Truly new project — derive readable name from ID
+            projectName = projectId.split('-')
+                .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+                .join(' ');
+        }
+
     } else {
-        // NO ID -> MIGRATION or NEW
-        
-        // Check legacy global key
-        const legacyKey = 'py5script_project';
-        const legacyData = localStorage.getItem(legacyKey);
-        
-        if (legacyData) {
-            // MIGRATION
-            console.log("Migrating legacy project...");
-            const newName = generateProjectName();
-            const newId = newName;
-            
-            // Save to new scoped keys
-            const oldName = localStorage.getItem('py5script_project_name') || "My Parsed Project";
-            
-            localStorage.setItem(`${PROJECT_KEY_PREFIX}${newId}_files`, legacyData);
-            localStorage.setItem(`${PROJECT_KEY_PREFIX}${newId}_name`, oldName);
-            localStorage.setItem(`${PROJECT_KEY_PREFIX}${newId}_dirty`, 'false');
-            
-            // Add to registry
-            updateRegistryEntry(newId, oldName);
-            
-            // WIPE legacy (Safety first? Maybe keep as backup? No, conflicting.)
-            localStorage.removeItem(legacyKey);
-            localStorage.removeItem('py5script_project_name');
-            localStorage.removeItem('py5script_is_dirty');
-            
-            // Redirect
-            window.location.href = `ide.html?id=${newId}`;
-            return false; // Stop loading
+        // No ?id → generate one and redirect
+        let newId;
+        const sketchParam = params.get('sketch');
+        if (sketchParam) {
+            const parts = sketchParam.split('/');
+            newId = parts[parts.length - 1].split('.')[0];
         } else {
-            // NEW FRESH PROJECT
-            let newId;
-
-            // Check if we have a 'sketch' parameter to derive ID from
-            const sketchParam = params.get('sketch');
-            if (sketchParam) {
-                // Extract filename without extension and directories
-                // e.g., "demo/webGLDemo.py" -> "webGLDemo"
-                const parts = sketchParam.split('/');
-                const filename = parts[parts.length - 1];
-                const basename = filename.split('.')[0];
-                newId = basename; // Use sketch name as ID
-            } else {
-                newId = generateProjectName();
-            }
-
-            // Redirect preserving other parameters
-            params.set('id', newId);
-            window.location.search = params.toString();
-            return false;
+            newId = generateProjectName();
         }
+        params.set('id', newId);
+        window.location.search = params.toString();
+        return false;
     }
-    
-    return true; // Continue loading
+
+    return true;
 }
 
-// Export globals
-window.renameProject = renameProject;
-window.saveProjectAs = saveProjectAs;
+// =============================================================================
+// UTILITIES
+// =============================================================================
+function makeSlugify() {
+    return (text) => text.toString().toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^\w\-]+/g, '')
+        .replace(/\-\-+/g, '-')
+        .replace(/^-+/, '')
+        .replace(/-+$/, '');
+}
+
+// =============================================================================
+// EXPORTS
+// =============================================================================
+window.renameProject             = renameProject;
+window.saveProjectAs             = saveProjectAs;
+window.getProjectRegistry        = getProjectRegistry;
+window.deleteProjectFromRegistry = deleteProjectFromRegistry;
