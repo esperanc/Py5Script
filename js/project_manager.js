@@ -618,7 +618,6 @@ async function loadProjectFromURL(callbacks = {}) {
 // NEW PROJECT
 // =============================================================================
 async function newProject() {
-    if (!checkDirty()) return;
     window.location.href = `ide.html?id=${generateProjectName()}`;
 }
 

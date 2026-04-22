@@ -561,17 +561,23 @@ if (downloadBtn) {
     downloadBtn.addEventListener('click', triggerExport);
 }
 
-newBtn.addEventListener('click', newProject);
+newBtn.addEventListener('click', () => {
+    // Flush current editor content and save before leaving
+    if (projectFiles[currentFile] !== undefined && !isBinary(projectFiles[currentFile])) {
+        projectFiles[currentFile] = editor.getValue();
+    }
+    saveProjectAndFiles();
+    newProject();
+});
 
 loadBtn.addEventListener('click', () => {
-    // Check dirty handled by click? No, input click opens dialog immediately.
-    // We should check dirty BEFORE clicking input?
-    // Browser security prevents programmatic click if not user initiated?
-    // Actually we can do it if initiated by user click on button.
-    if(checkDirty()) {
-        fileInput.click();
+    // Flush current editor content and save before opening file picker
+    if (projectFiles[currentFile] !== undefined && !isBinary(projectFiles[currentFile])) {
+        projectFiles[currentFile] = editor.getValue();
     }
-}); 
+    saveProjectAndFiles();
+    fileInput.click();
+});
 shareBtn.addEventListener('click', generateShareLink);
 fileInput.addEventListener('change', (e) => loadProjectFromBlob(e.target.files[0], e.target.files[0].name, {
     onImport: (msg) => logToConsole(msg, 'print'),
@@ -704,6 +710,11 @@ const closeProjectsBtn = document.getElementById('close-projects-btn');
 const projectList = document.getElementById('project-list');
 
 function openProjectsModal() {
+    // Flush current editor content and save before showing the list
+    if (projectFiles[currentFile] !== undefined && !isBinary(projectFiles[currentFile])) {
+        projectFiles[currentFile] = editor.getValue();
+    }
+    saveProjectAndFiles();
     renderProjectList();
     projectsModal.style.display = 'block';
     document.getElementById('modal-overlay').style.display = 'block';
