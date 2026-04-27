@@ -238,31 +238,52 @@ function isBinary(content) {
     return content && content.startsWith('data:');
 }
 
-function handleFileUpload(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+// Shared helper: read a single File object and add it to the project.
+// Returns a Promise that resolves when the file has been stored.
+function addExternalFile(file) {
+    return new Promise((resolve, reject) => {
+        if (file.size > 10 * 1024 * 1024) {
+            if (!confirm(`"${file.name}" is large (${(file.size / 1024 / 1024).toFixed(1)} MB). Continue?`)) {
+                return resolve(false); // skipped
+            }
+        }
 
-    if (file.size > 10 * 1024 * 1024) {
-        if (!confirm(`File is large (${(file.size / 1024 / 1024).toFixed(1)} MB). Continue?`)) {
-            event.target.value = '';
-            return;
+        const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml',
+                          '.gsdict', '.vert', '.frag', '.glsl', '.toml'];
+        const isText   = textExts.some(ext => file.name.toLowerCase().endsWith(ext));
+        const reader   = new FileReader();
+
+        reader.onload = (e) => {
+            projectFiles[file.name] = e.target.result;
+            isDirty = true;
+            resolve(true); // stored
+        };
+        reader.onerror = () => reject(reader.error);
+
+        isText ? reader.readAsText(file) : reader.readAsDataURL(file);
+    });
+}
+
+// Handle multiple-file selection from the sidebar "upload" button.
+async function handleFileUpload(event) {
+    const files = Array.from(event.target.files);
+    event.target.value = ''; // reset immediately so the same files can be re-selected if needed
+    if (files.length === 0) return;
+
+    let anyAdded = false;
+    for (const file of files) {
+        try {
+            const added = await addExternalFile(file);
+            if (added) anyAdded = true;
+        } catch (e) {
+            console.error(`Error reading "${file.name}":`, e);
         }
     }
 
-    const textExts = ['.py', '.txt', '.csv', '.json', '.md', '.xml', '.yaml',
-                      '.gsdict', '.vert', '.frag', '.glsl', '.toml'];
-    const isText   = textExts.some(ext => file.name.toLowerCase().endsWith(ext));
-    const reader   = new FileReader();
-
-    reader.onload = (e) => {
-        projectFiles[file.name] = e.target.result;
-        isDirty = true;
-        saveProjectAndFiles();
+    if (anyAdded) {
+        await saveProjectAndFiles();
         if (typeof updateFileList === 'function') updateFileList();
-        event.target.value = '';
-    };
-
-    isText ? reader.readAsText(file) : reader.readAsDataURL(file);
+    }
 }
 
 // =============================================================================
@@ -726,3 +747,4 @@ window.renameProject             = renameProject;
 window.saveProjectAs             = saveProjectAs;
 window.getProjectRegistry        = getProjectRegistry;
 window.deleteProjectFromRegistry = deleteProjectFromRegistry;
+window.addExternalFile           = addExternalFile;

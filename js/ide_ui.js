@@ -221,6 +221,43 @@ uploadFileBtn.addEventListener('click', () => uploadInput.click());
 addFileBtn.addEventListener('click', addFile);
 uploadInput.addEventListener('change', handleFileUpload);
 
+// --- DRAG AND DROP onto Files sidebar ---
+filePanelEl.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    filePanelEl.classList.add('drop-target');
+});
+
+filePanelEl.addEventListener('dragleave', (e) => {
+    // Only remove highlight when leaving the panel entirely (not a child element)
+    if (!filePanelEl.contains(e.relatedTarget)) {
+        filePanelEl.classList.remove('drop-target');
+    }
+});
+
+filePanelEl.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    filePanelEl.classList.remove('drop-target');
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+
+    let anyAdded = false;
+    for (const file of files) {
+        try {
+            const added = await addExternalFile(file);
+            if (added) anyAdded = true;
+        } catch (err) {
+            console.error(`Drop: error reading "${file.name}":`, err);
+        }
+    }
+
+    if (anyAdded) {
+        await saveProjectAndFiles();
+        updateFileList();
+    }
+});
+
 // --- RUNNER LOGIC ---
 function logToConsole(msg, type, filename, line) {
     const el = document.createElement('span');
