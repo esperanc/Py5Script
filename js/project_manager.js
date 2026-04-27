@@ -748,3 +748,4 @@ window.saveProjectAs             = saveProjectAs;
 window.getProjectRegistry        = getProjectRegistry;
 window.deleteProjectFromRegistry = deleteProjectFromRegistry;
 window.addExternalFile           = addExternalFile;
+window.idbPut                    = idbPut;

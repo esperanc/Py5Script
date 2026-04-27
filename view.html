@@ -86,39 +86,7 @@
         const iframe = document.getElementById('runner-frame');
         const consoleContent = document.getElementById('console-content');
         const consoleOverlay = document.getElementById('console-overlay');
-        
-        // --- CLEANUP OLD TEMPORARY PROJECTS ---
-        function cleanupOldViewProjects() {
-            const MAX_TEMP_PROJECTS = 5; // Keep only the 5 most recent temporary projects
-            const viewProjects = [];
-            
-            // Find all view-* projects in localStorage
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith('project_view-') && key.endsWith('_files')) {
-                    const id = key.replace('project_', '').replace('_files', '');
-                    const timestamp = parseInt(id.replace('view-', ''));
-                    if (!isNaN(timestamp)) {
-                        viewProjects.push({ id, timestamp, key });
-                    }
-                }
-            }
-            
-            // Sort by timestamp (newest first)
-            viewProjects.sort((a, b) => b.timestamp - a.timestamp);
-            
-            // Remove old projects beyond the limit
-            for (let i = MAX_TEMP_PROJECTS; i < viewProjects.length; i++) {
-                const proj = viewProjects[i];
-                localStorage.removeItem(`project_${proj.id}_files`);
-                localStorage.removeItem(`project_${proj.id}_name`);
-                localStorage.removeItem(`project_${proj.id}_dirty`);
-            }
-        }
-        
-        // Run cleanup on page load
-        cleanupOldViewProjects();
-        
+
         // --- CONSOLE LOGIC ---
         function logToConsole(msg, type) {
             const el = document.createElement('span');
@@ -126,7 +94,7 @@
             el.className = type === 'error' ? 'log-error' : 'log-print';
             consoleContent.appendChild(el);
             consoleContent.scrollTop = consoleContent.scrollHeight;
-            
+
             // Auto-show on error
             if (type === 'error') {
                 consoleOverlay.style.display = 'flex';
@@ -149,104 +117,108 @@
         document.getElementById('edit-btn').addEventListener('click', () => {
              const params = new URLSearchParams(window.location.search);
              let dest = 'ide.html';
-             
+
              if (params.has('sketch') || params.has('zip') || params.has('code')) {
-                 // Forward external components, strip 'id' if present (e.g. invalid combo)
-                 // Or just pass exact search? Pass exact search is safest unless ID conflicts.
-                 // But ide.html logic currently prioritizes ID if valid.
-                 // So we should STRIP 'id' if we are in External mode.
+                 // External mode: strip 'id' if present (it's a temporary view-* ID)
                  params.delete('id');
                  dest += '?' + params.toString();
              } else if (projectId && !projectId.startsWith('view-')) {
-                 // Existing Project
+                 // Existing saved project
                  dest += '?id=' + projectId;
              }
-             
+
              window.open(dest, '_blank');
         });
 
+        // --- Helper: read a project's files from IndexedDB ---
+        function idbGetFiles(id) {
+            return new Promise((resolve) => {
+                const req = indexedDB.open('py5script_db', 1);
+                req.onsuccess = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains('files')) { resolve(null); return; }
+                    const tx = db.transaction(['files'], 'readonly');
+                    const gr = tx.objectStore('files').get(id);
+                    gr.onsuccess = () => resolve(gr.result ? gr.result.files : null);
+                    gr.onerror   = () => resolve(null);
+                };
+                req.onerror = () => resolve(null);
+            });
+        }
+
         // --- RUNNER ---
+        function runSketch() {
+             // Pass sketch code via window.name for runner backward compatibility
+             let code = projectFiles['sketch.py'] || '';
+             if (!code && Object.keys(projectFiles).length > 0) {
+                 code = projectFiles[Object.keys(projectFiles)[0]] || '';
+             }
+
+             iframe.contentWindow.name = code;
+
+             // Pass 'case' parameter if present
+             const params = new URLSearchParams(window.location.search);
+             const caseParam = params.get('case');
+
+             let runnerUrl = 'runner.html?t=' + Date.now();
+             if (caseParam) {
+                 runnerUrl += '&case=' + caseParam;
+             }
+
+             // Always pass the project ID so runner.html can hydrate assets from IDB
+             runnerUrl += '&id=' + projectId;
+
+             iframe.src = runnerUrl;
+        }
+
         async function initView() {
             const params = new URLSearchParams(window.location.search);
             const idParam = params.get('id');
 
-            // 1. External Loading (Priority 1)
-            // If ?sketch=, ?zip=, or ?code= is present, we create a TEMP session.
+            // 1. External Loading (?sketch, ?zip, ?code) — Priority 1
             if (params.has('sketch') || params.has('zip') || params.has('code')) {
-                // Determine source ID (temp)
+                // Use a temporary ID so runner.html can also pick up assets via IDB
                 projectId = 'view-' + Date.now();
-                
+
                 await loadProjectFromURL({
-                     skipRegistry: true,  // Don't add temporary projects to registry
-                     onImport: (msg) => logToConsole(msg, 'print'),
-                     onError: (msg) => logToConsole(msg, 'error'),
-                     onLoaded: () => {
-                         // Save to storage so runner can access files, but skip registry to hide from project list
-                         const keyFiles = `${PROJECT_KEY_PREFIX}${projectId}_files`;
-                         const keyName = `${PROJECT_KEY_PREFIX}${projectId}_name`;
-                         localStorage.setItem(keyFiles, JSON.stringify(projectFiles));
-                         localStorage.setItem(keyName, projectName);
-                         runSketch();
-                     }
+                    skipRegistry: true,  // Don't add temp projects to the project list
+                    onImport: (msg) => logToConsole(msg, 'print'),
+                    onError: (msg) => logToConsole(msg, 'error'),
+                    onLoaded: async () => {
+                        // Persist to IDB so runner.html can hydrate assets with the same project ID
+                        await idbPut({ id: projectId, files: projectFiles });
+                        runSketch();
+                    }
                 });
                 return;
             }
 
-            // 2. Existing Project (Priority 2)
+            // 2. Existing project by ID (?id=…) — Priority 2
             if (idParam) {
                 projectId = idParam;
-                
-                // Check if exists in Storage
-                const keyFiles = `${PROJECT_KEY_PREFIX}${projectId}_files`;
-                const savedFiles = localStorage.getItem(keyFiles);
-                
-                if (savedFiles) {
-                    try {
-                        projectFiles = JSON.parse(savedFiles);
-                        // Do NOT saveProjectAndFiles(). We treat this as Read-Only.
-                        // Runner will load from the SAME key we just checked.
-                        runSketch();
-                    } catch(e) {
-                         console.error("Error loading project files", e);
-                         logToConsole(`Error loading project '${idParam}': Corrupt data.`, 'error');
+
+                // Try IndexedDB first (current storage backend)
+                let files = await idbGetFiles(projectId);
+
+                // Fall back to legacy localStorage key (in case data predates the IDB migration)
+                if (!files) {
+                    const raw = localStorage.getItem(`project_${projectId}_files`);
+                    if (raw) {
+                        try { files = JSON.parse(raw); } catch(e) { /* ignore */ }
                     }
+                }
+
+                if (files) {
+                    projectFiles = files;
+                    runSketch();
                 } else {
-                    logToConsole(`Project '${idParam}' not found.`, 'error');
+                    logToConsole(`Project '${idParam}' not found in storage.`, 'error');
                 }
                 return;
             }
-            
-            // 3. No Params -> Error
-            logToConsole("No project or sketch specified in URL.", "print");
-        }
 
-        function runSketch() {
-             // Find main file
-             let code = projectFiles['sketch.py'];
-             if (!code && Object.keys(projectFiles).length > 0) {
-                 code = projectFiles[Object.keys(projectFiles)[0]];
-             }
-             
-             if(code || Object.keys(projectFiles).length > 0) {
-                 // We don't need to pass code in window.name if we use ID hydration!
-                 // But runner supports both.
-                 // Let's pass code for backward comp, but ID is critical for assets.
-                 iframe.contentWindow.name = code || "";
-                 
-                 // Pass 'case' parameter if present
-                 const params = new URLSearchParams(window.location.search);
-                 const caseParam = params.get('case');
-                 
-                 let runnerUrl = 'runner.html?t=' + Date.now();
-                 if (caseParam) {
-                     runnerUrl += '&case=' + caseParam;
-                 }
-                 
-                 // Pass Project ID
-                 runnerUrl += '&id=' + projectId;
-                 
-                 iframe.src = runnerUrl;
-             }
+            // 3. No params → informational message
+            logToConsole("No project or sketch specified in URL.", "print");
         }
 
         initView();
