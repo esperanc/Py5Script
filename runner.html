@@ -135,9 +135,17 @@
             return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
         class P5Transformer(ast.NodeTransformer):
+            custom_aliases = {}
+            
             def __init__(self, user_defined, case_mode='both'):
                 # Use prototype to get properties since instance isn't created yet
                 self.p5_props = set(dir(js.p5.prototype))
+                # Add common instance properties that aren't on the prototype
+                self.p5_props.update([
+                    'width', 'height', 'frameCount', 'mouseX', 'mouseY', 'pmouseX', 'pmouseY',
+                    'mouseIsPressed', 'mouseButton', 'keyIsPressed', 'key', 'keyCode',
+                    'pixels', 'touches', 'deltaTime', 'focused'
+                ])
                 self.user_defined = user_defined
                 self.case_mode = case_mode
                 self.scope_stack = []
@@ -170,6 +178,14 @@
                     if name in scope:
                         return None
                         
+                # 0.1 Check custom aliases (e.g. set by hacks.py)
+                if name in self.custom_aliases:
+                    return self.custom_aliases[name]
+                        
+                # 0.5. Check if already defined in globals (e.g. from hacks.py)
+                if name in globals():
+                    return None
+
                 # 1. Check exact match (CamelCase)
                 if name in self.p5_props:
                     if self.case_mode in ['camel', 'both']:
@@ -607,7 +623,45 @@
                 setattr(builtins, _name, _val)
             # -------------------------------------------------------------------------
 
+            # --- Hacks Loading (hacks.py) ---
+            try:
+                from pyodide.http import pyfetch
+                url = f"hacks.py?t={js.Date.now()}"
+                resp = await pyfetch(url)
+                if resp.ok:
+                    hacks_source = await resp.string()
+                    if hacks_source.strip():
+                        try:
+                            hacks_tree = ast.parse(hacks_source)
+                            user_defined_hacks = set()
+                            for node in hacks_tree.body:
+                                if isinstance(node, ast.FunctionDef):
+                                    user_defined_hacks.add(node.name)
+                                elif isinstance(node, ast.Assign):
+                                    for target in node.targets:
+                                        if isinstance(target, ast.Name):
+                                            user_defined_hacks.add(target.id)
+                                        elif isinstance(target, (ast.Tuple, ast.List)):
+                                            for elt in target.elts:
+                                                if isinstance(elt, ast.Name):
+                                                    user_defined_hacks.add(elt.id)
 
+                            transformer = P5Transformer(user_defined_hacks, case_mode)
+                            new_hacks_tree = transformer.visit(hacks_tree)
+                            ast.fix_missing_locations(new_hacks_tree)
+                            
+                            code_obj = compile(new_hacks_tree, filename="hacks.py", mode="exec")
+                            exec(code_obj, globals())
+                        except Exception as e:
+                            err_msg = f"{e.__class__.__name__}: {e}"
+                            if isinstance(e, SyntaxError):
+                                err_msg = f"{e.__class__.__name__}: {e.msg}"
+                            line_num = getattr(e, 'lineno', 0)
+                            msg = {"type": "error", "message": err_msg, "filename": "hacks.py", "line": line_num}
+                            js.window.parent.postMessage(_to_js(msg, dict_converter=js.Object.fromEntries), "*")
+            except Exception as e:
+                pass
+            # -------------------------------------------------------------------------
 
             def sketch(p):
                 global P5
@@ -672,6 +726,31 @@
                     js.window.parent.postMessage(to_js(msg, dict_converter=js.Object.fromEntries), "*")
                     return
 
+                # --- STATIC MODE ---
+                # Detect whether or not a setup function was included.
+                # If not, copy all the code to the body of a setup function automatically.
+                has_setup = False
+                for node in tree.body:
+                    if isinstance(node, ast.FunctionDef) and node.name == 'setup':
+                        has_setup = True
+                        break
+                
+                if not has_setup:
+                    source = "def setup():\n" + textwrap.indent(source, "    ")
+                    try:
+                        tree = ast.parse(source)
+                    except Exception as e:
+                        err_msg = f"{e.__class__.__name__}: {e}"
+                        if isinstance(e, SyntaxError):
+                            err_msg = f"{e.__class__.__name__}: {e.msg}"
+                        line_num = getattr(e, 'lineno', 0)
+                        if line_num > 0:
+                            line_num -= 1
+                        msg = {"type": "error", "message": err_msg, "filename": "sketch.py", "line": line_num}
+                        js.window.parent.postMessage(to_js(msg, dict_converter=js.Object.fromEntries), "*")
+                        return
+                # -------------------
+
                 # Collect user definitions
                 user_defined = set()
                 for node in tree.body:
@@ -716,6 +795,9 @@
                                 err_filename = frame.filename
                                 line_num = frame.lineno
                     
+                    if not has_setup and err_filename == "sketch.py" and line_num > 0:
+                        line_num -= 1
+
                     msg = {"type": "error", "message": err_msg, "filename": err_filename, "line": line_num}
                     js.window.parent.postMessage(to_js(msg, dict_converter=js.Object.fromEntries), "*")
                     return

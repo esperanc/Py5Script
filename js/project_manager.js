@@ -453,11 +453,16 @@ async function loadProjectFromBlob(blob, filenameHint, callbacks = {}, options =
     // Resolve ID + collisions
     const slugify    = makeSlugify();
     let newId        = slugify(newProjectName) || ('imported-' + Date.now());
-    const registry   = getProjectRegistry();
-    const originalId = newId;
-    let counter      = 1;
-    while (registry[newId]) { newId = `${originalId}-${counter}`; counter++; }
-    if (newId !== originalId) newProjectName = `${newProjectName} (${counter - 1})`;
+    
+    if (skipRegistry) {
+        newId = 'view-' + Date.now();
+    } else {
+        const registry   = getProjectRegistry();
+        const originalId = newId;
+        let counter      = 1;
+        while (registry[newId]) { newId = `${originalId}-${counter}`; counter++; }
+        if (newId !== originalId) newProjectName = `${newProjectName} (${counter - 1})`;
+    }
 
     try {
         await idbPut({ id: newId, files: newProjectFiles });
@@ -568,9 +573,17 @@ async function loadProjectFromURL(callbacks = {}) {
     if (params.has('code')) {
         const code = LZString.decompressFromEncodedURIComponent(params.get('code'));
         if (code) {
-            const resolved = resolveCollision(params.get('name') || 'Shared Project');
-            projectId    = resolved.id;
-            projectName  = resolved.name;
+            let newId, newName;
+            if (callbacks.skipRegistry) {
+                newId = 'view-' + Date.now();
+                newName = params.get('name') || 'Shared Project';
+            } else {
+                const resolved = resolveCollision(params.get('name') || 'Shared Project');
+                newId = resolved.id;
+                newName = resolved.name;
+            }
+            projectId    = newId;
+            projectName  = newName;
             projectFiles = { 'sketch.py': code };
             currentFile  = 'sketch.py';
             loaded = true;
@@ -601,9 +614,17 @@ async function loadProjectFromURL(callbacks = {}) {
                         newProjectFiles[filename] = `data:${mime};base64,${b64}`;
                     }
                 }
-                const resolved = resolveCollision(params.get('name') || 'Shared Project');
-                projectId    = resolved.id;
-                projectName  = resolved.name;
+                let newId, newName;
+                if (callbacks.skipRegistry) {
+                    newId = 'view-' + Date.now();
+                    newName = params.get('name') || 'Shared Project';
+                } else {
+                    const resolved = resolveCollision(params.get('name') || 'Shared Project');
+                    newId = resolved.id;
+                    newName = resolved.name;
+                }
+                projectId    = newId;
+                projectName  = newName;
                 projectFiles = newProjectFiles;
                 currentFile  = projectFiles['sketch.py'] ? 'sketch.py' : (Object.keys(projectFiles)[0] || 'sketch.py');
                 loaded = true;
