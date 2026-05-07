@@ -324,9 +324,8 @@ function generateShareLink() {
     
     if (isSingleText) {
         const code = projectFiles['sketch.py'];
-        const compressed = LZString.compressToEncodedURIComponent(code);
         const url = window.location.origin + window.location.pathname.replace('ide.html', 'view.html') + 
-                    '?code=' + compressed + '&name=' + encodeURIComponent(projectName);
+                    '?' + createSketchCode(code) + '&name=' + encodeURIComponent(projectName);
         
         navigator.clipboard.writeText(url).then(() => {
             alert("Link copied to clipboard! Share it with anyone.");
