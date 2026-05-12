@@ -752,7 +752,7 @@ function openProjectsModal() {
     }
     saveProjectAndFiles();
     renderProjectList();
-    projectsModal.style.display = 'block';
+    projectsModal.style.display = 'flex';
     document.getElementById('modal-overlay').style.display = 'block';
 }
 
@@ -815,6 +815,7 @@ function renderProjectList() {
         name.style.textOverflow  = 'ellipsis';
         name.style.whiteSpace    = 'nowrap';
         name.textContent         = p.name || p.id;
+        name.title               = p.name || p.id;
 
         const meta = document.createElement('div');
         meta.style.fontSize  = '0.75em';

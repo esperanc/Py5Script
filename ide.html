@@ -142,15 +142,15 @@
     </div>
 
     <!-- Projects Modal -->
-    <div id="projects-modal" class="modal-dialog">
-         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+    <div id="projects-modal" class="modal-dialog" style="width: 450px; min-width: 300px; max-width: 90vw; resize: both; overflow: hidden; display: none; flex-direction: column;">
+         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex-shrink: 0;">
              <h2 style="margin:0;">Open Project</h2>
              <button id="sort-toggle-btn" title="Toggle sort order" style="background:#444; border:1px solid #666; color:#ccc; border-radius:4px; padding:4px 10px; cursor:pointer; font-size:0.8em;">Sort: Date</button>
          </div>
-         <div id="project-list-container" style="max-height: 350px; overflow-y: auto; margin-bottom: 10px; border: 1px solid #555; background: #222;">
+         <div id="project-list-container" style="flex: 1 1 auto; overflow-y: auto; margin-bottom: 10px; border: 1px solid #555; background: #222;">
              <ul id="project-list" style="list-style: none; padding: 0; margin: 0;"></ul>
          </div>
-         <div style="text-align: right;">
+         <div style="text-align: right; flex-shrink: 0;">
             <button id="close-projects-btn" style="background: #555;">Close</button>
         </div>
     </div>

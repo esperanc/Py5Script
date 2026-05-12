@@ -460,8 +460,26 @@ async function loadProjectFromBlob(blob, filenameHint, callbacks = {}, options =
         const registry   = getProjectRegistry();
         const originalId = newId;
         let counter      = 1;
-        while (registry[newId]) { newId = `${originalId}-${counter}`; counter++; }
-        if (newId !== originalId) newProjectName = `${newProjectName} (${counter - 1})`;
+        let foundMatchId = null;
+
+        while (registry[newId]) {
+            try {
+                const existing = await idbGet(newId);
+                if (existing && existing.files && areFilesEqual(existing.files, newProjectFiles)) {
+                    foundMatchId = newId;
+                    break;
+                }
+            } catch (e) { console.error('IDB error checking duplicates', e); }
+            newId = `${originalId}-${counter}`;
+            counter++;
+        }
+
+        if (foundMatchId) {
+            newId = foundMatchId;
+            newProjectName = registry[foundMatchId].name;
+        } else if (newId !== originalId) {
+            newProjectName = `${newProjectName} (${counter - 1})`;
+        }
     }
 
     try {
@@ -552,21 +570,33 @@ async function loadProjectFromURL(callbacks = {}) {
     const params = new URLSearchParams(window.location.search);
     let   loaded = false;
 
-    const resolveCollision = (name) => {
+    const resolveCollision = async (name, newFiles) => {
         const registry = getProjectRegistry();
         const slugify  = makeSlugify();
-        let   id       = slugify(name);
-        if (registry[id]) {
+        const originalId = slugify(name);
+        let checkId = originalId;
+        let counter = 1;
+
+        while (registry[checkId]) {
+            try {
+                const existing = await idbGet(checkId);
+                if (existing && existing.files && areFilesEqual(existing.files, newFiles)) {
+                    return { id: checkId, name: registry[checkId].name };
+                }
+            } catch (e) { console.error('IDB error checking duplicates', e); }
+            checkId = `${originalId}-${counter}`;
+            counter++;
+        }
+
+        if (registry[originalId]) {
             if (confirm(`A project named "${name}" already exists. Overwrite it?\n\nClick Cancel to create a copy instead.`)) {
-                return { id, name };
+                return { id: originalId, name };
             } else {
-                let counter = 1;
-                while (registry[slugify(`${name} (${counter})`)]) counter++;
-                const finalName = `${name} (${counter})`;
-                return { id: slugify(finalName), name: finalName };
+                const finalName = `${name} (${counter - 1})`;
+                return { id: checkId, name: finalName };
             }
         }
-        return { id, name };
+        return { id: originalId, name };
     };
 
     // 1. ?code=
@@ -578,7 +608,7 @@ async function loadProjectFromURL(callbacks = {}) {
                 newId = 'view-' + Date.now();
                 newName = params.get('name') || 'Shared Project';
             } else {
-                const resolved = resolveCollision(params.get('name') || 'Shared Project');
+                const resolved = await resolveCollision(params.get('name') || 'Shared Project', { 'sketch.py': code });
                 newId = resolved.id;
                 newName = resolved.name;
             }
@@ -619,7 +649,7 @@ async function loadProjectFromURL(callbacks = {}) {
                     newId = 'view-' + Date.now();
                     newName = params.get('name') || 'Shared Project';
                 } else {
-                    const resolved = resolveCollision(params.get('name') || 'Shared Project');
+                    const resolved = await resolveCollision(params.get('name') || 'Shared Project', newProjectFiles);
                     newId = resolved.id;
                     newName = resolved.name;
                 }
@@ -759,6 +789,17 @@ function makeSlugify() {
         .replace(/\-\-+/g, '-')
         .replace(/^-+/, '')
         .replace(/-+$/, '');
+}
+
+function areFilesEqual(filesA, filesB) {
+    if (!filesA || !filesB) return false;
+    const keysA = Object.keys(filesA);
+    const keysB = Object.keys(filesB);
+    if (keysA.length !== keysB.length) return false;
+    for (const k of keysA) {
+        if (filesA[k] !== filesB[k]) return false;
+    }
+    return true;
 }
 
 // =============================================================================
