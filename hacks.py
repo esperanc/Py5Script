@@ -28,15 +28,17 @@ def _make_p5_pair(begin_attr, end_attr, end_args=()):
     _Pair.__name__ = begin_attr
     return _Pair
 
-globals()['remap'] = remap
-globals()['size'] = size
-globals()['begin_shape'] = _make_p5_pair('beginShape',  'endShape')
-globals()['begin_closed_shape'] = _make_p5_pair('beginShape',  'endShape', end_args=lambda: (P5.CLOSE,))
-globals()['begin_contour'] = _make_p5_pair('beginContour',  'endContour')
-globals()['push_matrix'] = _make_p5_pair('push',  'pop')
-globals()['pop_matrix'] = lambda: P5.pop()
-globals()['push_style'] = _make_p5_pair('push',  'pop')
-globals()['pop_style'] = lambda: P5.pop()
+import builtins
+
+builtins.remap = globals()['remap'] = remap
+builtins.size = globals()['size'] = size
+builtins.begin_shape = globals()['begin_shape'] = _make_p5_pair('beginShape',  'endShape')
+builtins.begin_closed_shape = globals()['begin_closed_shape'] = _make_p5_pair('beginShape',  'endShape', end_args=lambda: (P5.CLOSE,))
+builtins.begin_contour = globals()['begin_contour'] = _make_p5_pair('beginContour',  'endContour')
+builtins.push_matrix = globals()['push_matrix'] = _make_p5_pair('push',  'pop')
+builtins.pop_matrix = globals()['pop_matrix'] = lambda: P5.pop()
+builtins.push_style = globals()['push_style'] = _make_p5_pair('push',  'pop')
+builtins.pop_style = globals()['pop_style'] = lambda: P5.pop()
 
 P5Transformer.custom_aliases['is_mouse_pressed'] = 'mouseIsPressed'
 P5Transformer.custom_aliases['is_key_pressed'] = 'keyIsPressed'

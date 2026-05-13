@@ -595,9 +595,11 @@
                 return filename
             
             # Expose to global scope for user scripts
-            globals()['asset'] = asset
-            # Ensure open is builtins.open (defensive)
             import builtins
+            globals()['asset'] = asset
+            setattr(builtins, 'asset', asset)
+            
+            # Ensure open is builtins.open (defensive)
             globals()['open'] = builtins.open
 
             # --- Pyodide / JS interop helpers (available everywhere, no import needed) ---
