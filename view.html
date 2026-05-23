@@ -187,6 +187,7 @@
                     onLoaded: async () => {
                         // Persist to IDB so runner.html can hydrate assets with the same project ID
                         await idbPut({ id: projectId, files: projectFiles });
+                        document.title = projectName + ' - Py5Script Viewer';
                         runSketch();
                     }
                 });
@@ -210,6 +211,17 @@
 
                 if (files) {
                     projectFiles = files;
+                    
+                    const registry = getProjectRegistry();
+                    if (registry[projectId] && registry[projectId].name) {
+                        projectName = registry[projectId].name;
+                    } else {
+                        projectName = projectId.split('-')
+                            .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+                            .join(' ');
+                    }
+                    document.title = projectName + ' - Py5Script Viewer';
+
                     runSketch();
                 } else {
                     logToConsole(`Project '${idParam}' not found in storage.`, 'error');

@@ -737,6 +737,7 @@ renameInput.addEventListener('keydown', (e) => {
 
 function updateProjectNameUI() {
     if (projectNameLabel) projectNameLabel.textContent = projectName;
+    document.title = projectName + ' - Py5Script';
 }
 window.updateProjectNameUI = updateProjectNameUI; // Expose to project_manager.js
 
