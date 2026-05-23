@@ -296,7 +296,10 @@ function getCurrentCode() {
     return projectFiles[currentFile] || '';
 }
 
-async function saveProjectAndFiles() {
+async function saveProjectAndFiles(force = false) {
+    if (!isDirty && !force) {
+        return;
+    }
     if (!projectId) {
         console.warn('No Project ID set, skipping save.');
         return;
@@ -310,6 +313,7 @@ async function saveProjectAndFiles() {
     try {
         await idbPut({ id: projectId, files: projectFiles });
         updateRegistryEntry(projectId, projectName); // sync
+        isDirty = false;
     } catch (e) {
         console.error('saveProjectAndFiles error:', e);
         alert(`Failed to save project: ${e.message}`);
@@ -528,8 +532,7 @@ function triggerExport() {
             a.download = `${projectName}.py`;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(a.href);
-            isDirty = false;
-            saveProjectAndFiles();
+            saveProjectAndFiles(true);
             return;
         }
 
@@ -552,8 +555,7 @@ function triggerExport() {
             a.download = `${projectName}.zip`;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(a.href);
-            isDirty = false;
-            saveProjectAndFiles();
+            saveProjectAndFiles(true);
         }).catch(e => alert('Failed to generate ZIP: ' + e.message));
 
     } catch (e) {

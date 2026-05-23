@@ -449,7 +449,7 @@ async function initializeIDE() {
             updateProjectNameUI();
         },
         onLoaded: () => {
-             saveProjectAndFiles();
+             saveProjectAndFiles(true);
         }
     });
 
