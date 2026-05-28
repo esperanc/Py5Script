@@ -3,6 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <title>Runner</title>
+    <script>
+        (function() {
+            const folder = new URLSearchParams(window.location.search).get('folder');
+            if (folder) document.title = folder.replace(/\/$/, '').split('/').pop();
+        })();
+    </script>
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
     
@@ -15,6 +21,22 @@
 </head>
 <body>
     <script>
+        // Capture the original console.error before any overrides, so we can
+        // call it directly without triggering the intercept (prevents infinite loops).
+        const _origConsoleError = console.error.bind(console);
+
+        // Display an error banner on-screen (standalone mode).
+        function _showError(message) {
+            let errDiv = document.getElementById('py5-error');
+            if (!errDiv) {
+                errDiv = document.createElement('div');
+                errDiv.id = 'py5-error';
+                errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c00;color:#fff;padding:8px 12px;font:13px/1.5 monospace;white-space:pre-wrap;z-index:9999;';
+                document.body.appendChild(errDiv);
+            }
+            errDiv.textContent += message + '\n';
+        }
+
         // Catch global JS errors (including PythonError from Pyodide)
         window.addEventListener('error', function(event) {
             let message = "";
@@ -23,7 +45,7 @@
             } else {
                  message = event.message || String(event);
             }
-            
+
             // Ignore duplicate SyntaxErrors (handled by Python logic)
             if (message && message.includes('SyntaxError:')) return;
 
@@ -40,52 +62,41 @@
             window.parent.postMessage(msg, '*');
         });
 
-        // Loopback message listener for standalone mode
+        // Loopback message listener for standalone mode.
+        // Uses _origConsoleError and _showError — never calls the overridden console.error
+        // to avoid an infinite loop (overridden console.error → postMessage → this listener → ...).
         window.addEventListener('message', (event) => {
             if (window.parent === window) {
                 const data = event.data;
                 if (data && data.type === 'print') {
                     console.log(data.message);
                 } else if (data && data.type === 'error') {
-                    if (data.filename) {
-                        console.error(`${data.filename}:${data.line} - ${data.message}`);
-                    } else {
-                        console.error(data.message);
-                    }
+                    const msg = data.filename
+                        ? `${data.filename}:${data.line} - ${data.message}`
+                        : data.message;
+                    _showError(msg);
+                    _origConsoleError(msg);
                 }
             }
         });
 
-        // Intercept console.error (used by p5.js for shader/internal errors)
+        // Intercept console.error to catch p5.js internal errors (e.g. shader compilation).
+        // In iframe (IDE) mode: forward to parent. In standalone mode: show on screen.
+        // Either way, never re-posts via window.parent when parent === window to avoid loops.
         (function() {
-            const originalError = console.error;
             console.error = function(...args) {
-                originalError.apply(console, args);
-                
-                // Convert args to string message
-                const message = args.map(arg => String(arg)).join(' ');
-                
-                // Post to IDE
-                window.parent.postMessage({ type: 'error', message: message }, '*');
+                _origConsoleError.apply(console, args);
 
-                // Stop Sketch if it's running (prevents infinite error loops)
-                // We access the global P5 instance from the Python side if possible, 
-                // but simpler to check the global variable directly if exposed to JS or just known.
-                // Logic: "P5" is defined in Python `globals()`, not necessarily window.
-                // BUT, we can try to stop p5 via the instance assigned to window.p5 if we can reach it.
-                // Actually, the instance is inside `sketch` function scope. 
-                // However, `P5` is global in Python. 
-                // Let's use a try-catch to call back into Python? Or just accept that `noLoop` might be hard to reach from here?
-                // Wait, we can't easily reach Python state from this JS block.
-                // BUT we can check `window.p5` which is the constructor. The instance?
-                // We don't have a global reference to the p5 instance in JS scope (it's in Python).
-                
-                // Workaround: We can post a message that *Python* listens to? No.
-                // We can't easily stop it from here unless we exposed the instance to window.
-                // Let's rely on the user manually stopping?
-                // NO, user requested "stop the execution".
-                
-                // Solution: In `sketch()` function (Python), we set `js.window.currentP5 = p`.
+                const message = args.map(arg => String(arg)).join(' ');
+
+                if (window.parent !== window) {
+                    // IDE iframe mode: forward error to the IDE shell
+                    window.parent.postMessage({ type: 'error', message: message }, '*');
+                } else {
+                    // Standalone mode: display on screen
+                    _showError(message);
+                }
+
                 if (window.currentP5) {
                     try { window.currentP5.noLoop(); } catch(e){}
                 }
@@ -240,10 +251,12 @@
                             elif isinstance(value, ast.AST):
                                 visit_node_scope(value)
                     
-                    # Scopes - STOP recursion. 
-                    # Nested functions/classes create their own scope, so their locals aren't ours.
-                    elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
-                        return 
+                    # Scopes - STOP recursion into body, but the name itself is local to this scope.
+                    elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                        local_vars.add(n.name)
+                        return
+                    elif isinstance(n, ast.Lambda):
+                        return
 
                     # Statements - Recurse into lists of statements (like module body or if body)
                     elif hasattr(n, 'body') and isinstance(n.body, list):
@@ -319,7 +332,9 @@
             project_id = params.get('id')
             case_mode = params.get('case') or 'both'
             raw_window_name = js.window.name or ""
-            
+            folder = params.get('folder') or ''
+            base_path = folder.rstrip('/') + '/' if folder else ''
+
             # Will be set to True if no project is loaded from localStorage or via IDE
             is_standalone = False
             if not project_id and not raw_window_name.strip():
@@ -334,12 +349,12 @@
                     filename = fullname + ".py"
                     if os.path.exists(filename):
                         return importlib.util.spec_from_file_location(fullname, filename, loader=self)
-                    
+
                     if is_standalone:
                         try:
-                            # Standalone mode: try synchronous fetch for dynamic imports
+                            # Standalone mode: fetch from server (respecting folder prefix)
                             req = js.XMLHttpRequest.new()
-                            req.open('GET', filename, False)
+                            req.open('GET', base_path + filename, False)
                             req.send(None)
                             if req.status == 200:
                                 with open(filename, 'w') as f:
@@ -478,23 +493,30 @@
                 except Exception:
                     pass
                 
+            # Pre-fetched sketch source (standalone+folder mode).
+            # Stored here so sketch() can use it directly without relying on Pyodide's FS.
+            sketch_source = ''
+
             if is_standalone:
                 print("Running in Standalone Mode. Trying to fetch files dynamically via web server...")
                 try:
                     from pyodide.http import pyfetch
-                    
-                    # Pre-fetch main sketch file so it's synchronously available when setup runs
+
+                    # Pre-fetch main sketch file and keep content in a closure variable.
+                    # We also write to the FS so that module imports (P5Importer) can find it,
+                    # but sketch() reads from sketch_source to avoid any FS timing issues.
                     try:
-                        resp = await pyfetch('sketch.py')
+                        resp = await pyfetch(base_path + 'sketch.py')
                         if resp.ok:
+                            sketch_source = await resp.string()
                             with open('sketch.py', 'w') as f:
-                                f.write(await resp.string())
-                    except Exception:
-                        pass
-                        
+                                f.write(sketch_source)
+                    except Exception as e:
+                        print("Error fetching sketch.py:", e)
+
                     for cfg in ["requirements.txt", "js_modules.txt"]:
                         try:
-                            resp = await pyfetch(cfg)
+                            resp = await pyfetch(base_path + cfg)
                             if resp.ok:
                                 with open(cfg, "w") as f:
                                     f.write(await resp.string())
@@ -682,8 +704,13 @@
                     def wrapper(*args, **kwargs):
                         new_args = []
                         for arg in args:
-                            if isinstance(arg, str) and arg in hydrated_assets:
-                                new_args.append(hydrated_assets[arg])
+                            if isinstance(arg, str):
+                                if arg in hydrated_assets:
+                                    new_args.append(hydrated_assets[arg])
+                                elif base_path and not arg.startswith(('http://', 'https://', '//', '/', 'data:')):
+                                    new_args.append(base_path + arg)
+                                else:
+                                    new_args.append(arg)
                             else:
                                 new_args.append(arg)
                         return original_loader(*new_args, **kwargs)
@@ -700,14 +727,18 @@
                 raw_source = js.window.name
                 source = textwrap.dedent(raw_source)
                 
-                # Standalone Mode fallback
+                # Standalone Mode fallback: use pre-fetched content first (avoids FS timing issues),
+                # then try reading from disk (original standalone mode without folder param).
                 if not source.strip() and is_standalone:
-                     try:
-                         if os.path.exists("sketch.py"):
-                             with open("sketch.py", "r") as f:
-                                 source = f.read()
-                     except Exception:
-                         pass
+                    if sketch_source:
+                        source = sketch_source
+                    else:
+                        try:
+                            if os.path.exists("sketch.py"):
+                                with open("sketch.py", "r") as f:
+                                    source = f.read()
+                        except Exception:
+                            pass
 
                 if not source.strip(): 
                     if is_standalone:

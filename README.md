@@ -199,7 +199,71 @@ You can build Py5Script apps without using the IDE by directly utilizing `runner
 When loaded outside the IDE, `runner.html` enters **Standalone Mode**. It automatically uses Pyodide to fetch your `sketch.py`, `requirements.txt`, and `js_modules.txt` from the local web server. It also dynamically intercepts regular Python `import module` statements and fetches the corresponding `.py` files automatically.
 
 **A Note on Assets:**
-Standard `p5.js` functions like `P5.loadImage("cat.png")` or `P5.loadStrings("data.csv")` will work seamlessly since they fetch over standard HTTP. However, standard Python basic `open("data.txt")` requires the file to be present in Pyodide's virtual filesystem. It is recommended to stick to `p5.js` native loaders or use `pyodide.http.pyfetch` for raw text data in standalone mode.
+Standard `p5.js` functions like `P5.loadImage("cat.png")` or `P5.loadStrings("data.csv")` will work seamlessly since they fetch over standard HTTP. However, standard Python `open("data.txt")` requires the file to be present in Pyodide's virtual filesystem. It is recommended to stick to `p5.js` native loaders or use `pyodide.http.pyfetch` for raw text data in standalone mode.
+
+**Error Display:**
+In standalone mode, runtime errors are shown directly on the page as a red banner at the top, so you do not need to open the browser developer console to diagnose problems.
+
+---
+
+### Multi-Sketch Setup (Folder Mode)
+
+You can host several independent sketches under a single `index.html` by placing each sketch in its own subfolder and using the `?folder=` URL parameter to select which one to run.
+
+#### Folder structure
+
+```
+/                          ← web server root
+  index.html               ← copy of runner.html
+  hacks.py                 ← optional global hacks, shared by all sketches
+  sketch.py                ← optional default sketch (runs at http://localhost:8000/)
+  sketch1/
+    sketch.py              ← main sketch file
+    helper.py              ← any extra Python modules (imported automatically)
+    terrain.png            ← assets (loadImage, loadFont, etc.)
+    requirements.txt       ← optional: Python packages (micropip)
+    js_modules.txt         ← optional: external JS libraries
+  sketch2/
+    sketch.py
+    ...
+  sketch3/
+    sketch.py
+    ...
+```
+
+A `sketch.py` placed directly in the root (alongside `index.html`) acts as the **default sketch**: accessing `http://localhost:8000/` with no `?folder=` parameter runs it. This is identical to the original single-sketch standalone workflow.
+
+#### Running a sketch
+
+| URL | Sketch that runs |
+|---|---|
+| `http://localhost:8000/` | `/sketch.py` (root default) |
+| `http://localhost:8000/?folder=sketch1` | `/sketch1/sketch.py` |
+| `http://localhost:8000/?folder=sketch2` | `/sketch2/sketch.py` |
+
+Navigate to `http://localhost:8000/?folder=sketch1` to run a subfolder sketch.
+
+The runner fetches all files from the `sketch1/` subfolder:
+
+| File | Resolved URL |
+|---|---|
+| `sketch.py` | `/sketch1/sketch.py` |
+| `import helper` | `/sketch1/helper.py` |
+| `loadImage("terrain.png")` | `/sketch1/terrain.png` |
+| `requirements.txt` | `/sketch1/requirements.txt` |
+| `js_modules.txt` | `/sketch1/js_modules.txt` |
+| `hacks.py` | `/hacks.py` (always from root) |
+
+The browser tab title is automatically set to the folder name (e.g. **sketch1**).
+
+#### Notes
+- **`hacks.py`** is always loaded from the server root, never from the subfolder. This makes it a shared global configuration for all sketches. If a sketch does not need any customisation from `hacks.py`, you can simply omit the file.
+- **Asset paths** in sketch code are relative to the subfolder. `loadImage("cat.png")` loads `/sketch1/cat.png` — no path prefix is needed in the sketch source.
+- **Python imports** work the same way: `import helper` fetches `/sketch1/helper.py`.
+- **Absolute URLs** (starting with `http://`, `https://`, `/`, or `data:`) and URLs already in the hydrated asset store are never modified.
+- The `?folder=` value may be a nested path, e.g. `?folder=demos/terrain`. The tab title shows only the last path segment (`terrain`).
+
+---
 
 ### URL Parameters
 - `?id=<project-id>`: Loads a project by its ID from IndexedDB.
@@ -207,6 +271,7 @@ Standard `p5.js` functions like `P5.loadImage("cat.png")` or `P5.loadStrings("da
 - `?code=<lz_string>`: Loads a single-file sketch from the URL hash.
 - `?zip=<base64_lz_string>`: Loads a multi-file project from the URL hash.
 - `?case=<mode>`: Configures snake_case converter (`both`, `snake`, `camel`).
+- `?folder=<path>`: Runs a sketch from a subfolder (see [Multi-Sketch Setup](#multi-sketch-setup-folder-mode)).
 
 ## Deployment & Hosting
 
