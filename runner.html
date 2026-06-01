@@ -37,6 +37,91 @@
             errDiv.textContent += message + '\n';
         }
 
+        // ---- Print console overlay ----
+        // Hidden by default. A toggle button at the bottom-right corner shows/hides it.
+        // Receives raw chunks from StdoutCatcher — print("hi") sends "hi" then "\n".
+        let _printOutput = null, _printPanel = null, _printBtn = null, _unreadLines = 0;
+
+        function _ensurePrintUI() {
+            if (_printPanel) return;
+
+            // Panel
+            _printPanel = document.createElement('div');
+            _printPanel.id = 'py5-print';
+            _printPanel.style.cssText =
+                'display:none;position:fixed;bottom:0;left:0;right:0;height:140px;' +
+                'background:rgba(0,0,0,0.78);color:#e8e8e8;font:12px/1.5 monospace;' +
+                'white-space:pre-wrap;z-index:9998;box-sizing:border-box;';
+
+            // Drag-to-resize handle at the top edge
+            const handle = document.createElement('div');
+            handle.style.cssText =
+                'position:absolute;top:0;left:0;right:0;height:6px;' +
+                'cursor:ns-resize;background:rgba(255,255,255,0.13);';
+            _printPanel.appendChild(handle);
+
+            // Scrollable output area
+            _printOutput = document.createElement('div');
+            _printOutput.style.cssText =
+                'position:absolute;top:6px;bottom:0;left:0;right:0;' +
+                'overflow-y:auto;padding:4px 10px;box-sizing:border-box;';
+            _printPanel.appendChild(_printOutput);
+
+            document.body.appendChild(_printPanel);
+
+            // Toggle button
+            _printBtn = document.createElement('button');
+            _printBtn.style.cssText =
+                'position:fixed;bottom:8px;right:8px;z-index:9999;' +
+                'background:rgba(0,0,0,0.55);color:#ddd;border:none;' +
+                'padding:4px 10px;font:12px monospace;cursor:pointer;' +
+                'border-radius:4px;user-select:none;';
+            _printBtn.textContent = '▲ console';
+            document.body.appendChild(_printBtn);
+
+            _printBtn.addEventListener('click', () => {
+                const opening = _printPanel.style.display === 'none';
+                _printPanel.style.display = opening ? 'block' : 'none';
+                _unreadLines = 0;
+                _refreshBtn();
+            });
+
+            // Resize: drag upward to grow, downward to shrink
+            let dragY0, dragH0;
+            handle.addEventListener('mousedown', e => {
+                dragY0 = e.clientY;
+                dragH0 = _printPanel.offsetHeight;
+                e.preventDefault();
+                const onMove = e2 => {
+                    _printPanel.style.height =
+                        Math.max(48, dragH0 - (e2.clientY - dragY0)) + 'px';
+                };
+                const onUp = () => {
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            });
+        }
+
+        function _refreshBtn() {
+            if (!_printBtn) return;
+            const open = _printPanel && _printPanel.style.display !== 'none';
+            _printBtn.textContent = open ? '▼ console'
+                : (_unreadLines ? `▲ console (${_unreadLines})` : '▲ console');
+        }
+
+        function _showPrint(text) {
+            _ensurePrintUI();
+            _printOutput.textContent += text;
+            _printOutput.scrollTop = _printOutput.scrollHeight;
+            if (_printPanel.style.display === 'none') {
+                _unreadLines += (text.match(/\n/g) || []).length;
+                _refreshBtn();
+            }
+        }
+
         // Catch global JS errors (including PythonError from Pyodide)
         window.addEventListener('error', function(event) {
             let message = "";
@@ -70,6 +155,7 @@
                 const data = event.data;
                 if (data && data.type === 'print') {
                     console.log(data.message);
+                    _showPrint(data.message);
                 } else if (data && data.type === 'error') {
                     const msg = data.filename
                         ? `${data.filename}:${data.line} - ${data.message}`
@@ -498,7 +584,6 @@
             sketch_source = ''
 
             if is_standalone:
-                print("Running in Standalone Mode. Trying to fetch files dynamically via web server...")
                 try:
                     from pyodide.http import pyfetch
 
