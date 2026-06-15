@@ -150,13 +150,10 @@ async function migrateFromLocalStorage() {
     const ids = Object.keys(registry);
     if (ids.length === 0) return;
 
-    console.log(`[Migration] Found ${ids.length} project(s) in registry: [${ids.join(', ')}]`);
-
-    let migratedCount = 0;
     for (const id of ids) {
         const rawFiles = localStorage.getItem(`${LS_PROJECT_PREFIX}${id}_files`);
         if (!rawFiles) {
-            console.log(`[Migration] "${id}" — no _files LS key, skipping (already migrated or LS cleared).`);
+            // Already migrated (or LS cleared) — nothing to do.
             continue;
         }
 
@@ -164,7 +161,6 @@ async function migrateFromLocalStorage() {
             // Check if already in IDB
             const existing = await idbGet(id);
             if (existing && existing.files) {
-                console.log(`[Migration] "${id}" — already in IDB, cleaning up LS keys.`);
                 localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_files`);
                 localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_name`);
                 localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_dirty`);
@@ -181,17 +177,14 @@ async function migrateFromLocalStorage() {
             }
 
             // Write to IDB
-            console.log(`[Migration] "${id}" — writing to IDB (${Object.keys(files).length} files)...`);
             await idbPut({ id, files });
 
             // Verify the write by reading back before removing the LS key
             const verify = await idbGet(id);
             if (verify && verify.files) {
-                console.log(`[Migration] "${id}" — IDB write verified. Removing LS keys.`);
                 localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_files`);
                 localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_name`);
                 localStorage.removeItem(`${LS_PROJECT_PREFIX}${id}_dirty`);
-                migratedCount++;
             } else {
                 console.error(`[Migration] "${id}" — IDB write could NOT be verified! Keeping LS keys as fallback.`);
             }
@@ -226,9 +219,6 @@ async function migrateFromLocalStorage() {
         }
     }
 
-    if (migratedCount > 0) {
-        console.log(`[Migration] Complete: ${migratedCount} project(s) moved to IndexedDB.`);
-    }
 }
 
 // =============================================================================
