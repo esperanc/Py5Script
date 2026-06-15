@@ -122,6 +122,15 @@
             }
         }
 
+        // Standalone (top-level) mode: create the collapsed console UI up-front so the
+        // toggle button is always visible from page load — even before, or without, any
+        // print() output. (In IDE/view iframe mode, prints are forwarded to the parent's
+        // own console instead, so this overlay stays out of the way.)
+        if (window.parent === window) {
+            if (document.body) _ensurePrintUI();
+            else document.addEventListener('DOMContentLoaded', _ensurePrintUI);
+        }
+
         // Catch global JS errors (including PythonError from Pyodide)
         window.addEventListener('error', function(event) {
             let message = "";
@@ -421,9 +430,12 @@
             folder = params.get('folder') or ''
             base_path = folder.rstrip('/') + '/' if folder else ''
 
-            # Will be set to True if no project is loaded from localStorage or via IDE
+            # Will be set to True if no project is loaded from localStorage or via IDE.
+            # A 'folder' param explicitly selects a standalone sketch on the server, so
+            # it forces standalone mode even if window.name carries stale content (e.g.
+            # leftover JSON from a previous IDE/share session in the same browsing context).
             is_standalone = False
-            if not project_id and not raw_window_name.strip():
+            if folder or (not project_id and not raw_window_name.strip()):
                 is_standalone = True
 
             # --- Custom Import Hook for Auto-Prefixing in Modules ---
@@ -785,45 +797,85 @@
                 
                 # Intercept load functions to use Data URLs if available
                 # This fixes p5.loadImage() failing to fetch local files
+                #
+                # Re-entrancy guard: some p5 loaders call other loaders internally
+                # (loadShader -> loadStrings twice; loadModel -> loadStrings for .obj).
+                # Both the outer and inner methods are wrapped here, so without a guard
+                # the base_path / asset resolution would be applied twice, producing
+                # paths like "folder/folder/shader.glsl" (404). Only the outermost,
+                # user-facing call resolves arguments; nested calls pass through
+                # unchanged since their paths were already resolved.
+                _resolve_depth = [0]
+
+                def resolve_asset_path(arg):
+                    """Resolve a single load() argument: substitute hydrated data URLs
+                    (IDE mode) or prepend the sketch folder (standalone folder mode).
+                    A leading './' is normalized away so it matches asset keys and
+                    joins cleanly with base_path."""
+                    if not isinstance(arg, str):
+                        return arg
+                    clean = arg[2:] if arg.startswith('./') else arg
+                    if clean in hydrated_assets:
+                        return hydrated_assets[clean]
+                    if base_path and not clean.startswith(('http://', 'https://', '//', '/', 'data:')):
+                        return base_path + clean
+                    return arg
+
                 def create_asset_loader(original_loader, loader_name):
                     def wrapper(*args, **kwargs):
-                        new_args = []
-                        for arg in args:
-                            if isinstance(arg, str):
-                                if arg in hydrated_assets:
-                                    new_args.append(hydrated_assets[arg])
-                                elif base_path and not arg.startswith(('http://', 'https://', '//', '/', 'data:')):
-                                    new_args.append(base_path + arg)
-                                else:
-                                    new_args.append(arg)
-                            else:
-                                new_args.append(arg)
-                        return original_loader(*new_args, **kwargs)
+                        if _resolve_depth[0] > 0:
+                            # Nested call from within another wrapped loader:
+                            # paths are already resolved, don't touch them.
+                            return original_loader(*args, **kwargs)
+                        _resolve_depth[0] += 1
+                        try:
+                            new_args = [resolve_asset_path(arg) for arg in args]
+                            return original_loader(*new_args, **kwargs)
+                        finally:
+                            _resolve_depth[0] -= 1
                     return wrapper
 
                 # List of load functions to wrap
                 load_funcs = ['loadImage', 'loadJSON', 'loadStrings', 'loadTable', 'loadXML', 'loadBytes', 'loadModel', 'loadFont', 'loadSound', 'loadShader']
-                for name in load_funcs:
-                    if hasattr(p, name):
-                         original = getattr(p, name)
-                         setattr(p, name, create_proxy(create_asset_loader(original, name)))
+
+                # The pristine p5 loaders, captured exactly once (the first time we wrap).
+                # Needed because p5 RESTORES these prototype methods onto the instance in
+                # _setup() after preload() finishes (see p5 main.js), discarding our
+                # wrappers. So we must re-install them before the user's setup() runs,
+                # and we must always re-wrap the pristine original — never a wrapper —
+                # to avoid double-prefixing.
+                _pristine_loaders = {}
+
+                def install_loaders():
+                    for name in load_funcs:
+                        if hasattr(p, name):
+                            if name not in _pristine_loaders:
+                                _pristine_loaders[name] = getattr(p, name)
+                            setattr(p, name, create_proxy(create_asset_loader(_pristine_loaders[name], name)))
+
+                # Wrap now so loaders used inside preload() are intercepted.
+                install_loaders()
 
                 # 1. Get Code & Params
                 raw_source = js.window.name
                 source = textwrap.dedent(raw_source)
-                
-                # Standalone Mode fallback: use pre-fetched content first (avoids FS timing issues),
-                # then try reading from disk (original standalone mode without folder param).
-                if not source.strip() and is_standalone:
-                    if sketch_source:
-                        source = sketch_source
-                    else:
+
+                # In standalone mode the sketch is defined by the file fetched from the
+                # server, NOT by window.name — which can carry stale JSON/source from a
+                # previous IDE or share session in the same browsing context. Prefer the
+                # pre-fetched content (closure var), then the FS copy, and only fall back
+                # to window.name if neither is available.
+                if is_standalone:
+                    fetched = sketch_source
+                    if not fetched:
                         try:
                             if os.path.exists("sketch.py"):
                                 with open("sketch.py", "r") as f:
-                                    source = f.read()
+                                    fetched = f.read()
                         except Exception:
                             pass
+                    if fetched.strip():
+                        source = fetched
 
                 if not source.strip(): 
                     if is_standalone:
@@ -934,12 +986,14 @@
                 import inspect
                 import traceback
 
-                def safe_wrapper(func):
+                def safe_wrapper(func, before=None):
                     def wrapper(*args, **kwargs):
                         try:
+                            if before:
+                                before()
                             return func(*args, **kwargs)
                         except Exception:
-                            traceback.print_exc() 
+                            traceback.print_exc()
                             # Stop the sketch loop on error
                             if P5:
                                 P5.noLoop()
@@ -975,8 +1029,13 @@
                              except Exception as e:
                                  pass
 
-                        # Wrap in error handler
-                        secure_func = safe_wrapper(py_func)
+                        # Wrap in error handler. For setup, re-install the asset
+                        # loaders first: p5 restores the pristine prototype loaders
+                        # onto the instance after preload(), so without this any
+                        # on-demand load (in setup/draw/callbacks) would bypass our
+                        # base_path / hydrated-asset resolution.
+                        before = install_loaders if event == 'setup' else None
+                        secure_func = safe_wrapper(py_func, before)
                         setattr(p, event, create_proxy(secure_func))
 
             proxy = create_proxy(sketch)
