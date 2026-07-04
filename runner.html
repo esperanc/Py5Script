@@ -1,24 +1,88 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Runner</title>
     <script>
-        (function() {
+        (function () {
             const folder = new URLSearchParams(window.location.search).get('folder');
             if (folder) document.title = folder.replace(/\/$/, '').split('/').pop();
         })();
     </script>
     <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
     <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-    
+
+    <!-- The old p5 library -->
     <script src="https://cdn.jsdelivr.net/npm/p5@1.11.11/lib/p5.min.js"></script>
+
+    <!-- The new p5 library 
+    <script src="https://cdn.jsdelivr.net/npm/p5@2.3.0/lib/p5.min.js"></script> -->
+
+    <!-- Monkey-patch: fix p5.js shaderSrc() splitting on "void main" substring.
+         The original code does src.split('void main') which breaks when that
+         substring appears elsewhere (e.g. "void mainImage" or in comments).
+         We replace it with a regex that matches only the actual void main() declaration. -->
+    <script>
+        (function () {
+            if (!p5 || !p5.Shader) return;
+            const _origShaderSrc = p5.Shader.prototype.shaderSrc;
+            p5.Shader.prototype.shaderSrc = function (src, shaderType) {
+                // Match "void main" only when followed by optional whitespace and "("
+                // — i.e. the real main() declaration, not "void mainImage" etc.
+                const re = /void\s+main\s*(?=\()/;
+                const m = re.exec(src);
+                if (!m) return _origShaderSrc.call(this, src, shaderType);
+                const preMain = src.slice(0, m.index);
+                const postMain = src.slice(m.index + m[0].length);
+                // Rebuild with hooks injected (mirrors the original logic)
+                let hooks = '';
+                for (const key in this.hooks.uniforms) {
+                    hooks += 'uniform ' + key + ';\n';
+                }
+                if (this.hooks.declarations) hooks += this.hooks.declarations + '\n';
+                if (this.hooks[shaderType] && this.hooks[shaderType].declarations) {
+                    hooks += this.hooks[shaderType].declarations + '\n';
+                }
+                for (const hDef in this.hooks.helpers) {
+                    hooks += hDef + this.hooks.helpers[hDef] + '\n';
+                }
+                if (this.hooks[shaderType]) {
+                    for (const hDef in this.hooks[shaderType]) {
+                        if (hDef === 'declarations') continue;
+                        const parts = hDef.split(' ');
+                        const hookType = parts[0], hookName = parts[1];
+                        if (this.hooks.modified[shaderType][hDef]) {
+                            hooks += '#define AUGMENTED_HOOK_' + hookName + '\n';
+                        }
+                        hooks += hookType + ' HOOK_' + hookName + this.hooks[shaderType][hDef] + '\n';
+                    }
+                }
+                return preMain + hooks + m[0] + postMain;
+            };
+        })();
+    </script>
+
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; }
-        main { display: flex; justify-content: center; align-items: center; height: 100vh; }
-        canvas { display: block; }
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        main {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+        }
     </style>
 </head>
+
 <body>
     <script>
         // Capture the original console.error before any overrides, so we can
@@ -132,12 +196,12 @@
         }
 
         // Catch global JS errors (including PythonError from Pyodide)
-        window.addEventListener('error', function(event) {
+        window.addEventListener('error', function (event) {
             let message = "";
             if (event.error && event.error.message) {
-                 message = event.error.message;
+                message = event.error.message;
             } else {
-                 message = event.message || String(event);
+                message = event.message || String(event);
             }
 
             // Ignore duplicate SyntaxErrors (handled by Python logic)
@@ -148,7 +212,7 @@
         });
 
         // Catch unhandled promise rejections (often used by async Pyodide)
-        window.addEventListener('unhandledrejection', function(event) {
+        window.addEventListener('unhandledrejection', function (event) {
             const message = (event.reason ? event.reason.message || event.reason : "Unknown");
             if (message && message.toString().includes('SyntaxError:')) return;
 
@@ -178,8 +242,8 @@
         // Intercept console.error to catch p5.js internal errors (e.g. shader compilation).
         // In iframe (IDE) mode: forward to parent. In standalone mode: show on screen.
         // Either way, never re-posts via window.parent when parent === window to avoid loops.
-        (function() {
-            console.error = function(...args) {
+        (function () {
+            console.error = function (...args) {
                 _origConsoleError.apply(console, args);
 
                 const message = args.map(arg => String(arg)).join(' ');
@@ -193,7 +257,7 @@
                 }
 
                 if (window.currentP5) {
-                    try { window.currentP5.noLoop(); } catch(e){}
+                    try { window.currentP5.noLoop(); } catch (e) { }
                 }
             };
         })();
@@ -1045,4 +1109,5 @@
         asyncio.ensure_future(entry_point())
     </script>
 </body>
+
 </html>
