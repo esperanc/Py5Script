@@ -22,46 +22,28 @@
     <!-- Monkey-patch: fix p5.js shaderSrc() splitting on "void main" substring.
          The original code does src.split('void main') which breaks when that
          substring appears elsewhere (e.g. "void mainImage" or in comments).
-         We replace it with a regex that matches only the actual void main() declaration. -->
+         We pre-process the source so that only the real void main() survives
+         the split, then restore the original text after the split. -->
     <script>
         (function () {
-            if (!p5 || !p5.Shader) return;
+            if (typeof p5 === 'undefined' || !p5.Shader) return;
             const _origShaderSrc = p5.Shader.prototype.shaderSrc;
             p5.Shader.prototype.shaderSrc = function (src, shaderType) {
-                // Match "void main" only when followed by optional whitespace and "("
-                // — i.e. the real main() declaration, not "void mainImage" etc.
-                const re = /void\s+main\s*(?=\()/;
-                const m = re.exec(src);
-                if (!m) return _origShaderSrc.call(this, src, shaderType);
-                const preMain = src.slice(0, m.index);
-                const postMain = src.slice(m.index + m[0].length);
-                // Rebuild with hooks injected (mirrors the original logic)
-                let hooks = '';
-                for (const key in this.hooks.uniforms) {
-                    hooks += 'uniform ' + key + ';\n';
+                if (!src || !src.includes('void main')) {
+                    return _origShaderSrc.call(this, src, shaderType);
                 }
-                if (this.hooks.declarations) hooks += this.hooks.declarations + '\n';
-                if (this.hooks[shaderType] && this.hooks[shaderType].declarations) {
-                    hooks += this.hooks[shaderType].declarations + '\n';
-                }
-                for (const hDef in this.hooks.helpers) {
-                    hooks += hDef + this.hooks.helpers[hDef] + '\n';
-                }
-                if (this.hooks[shaderType]) {
-                    for (const hDef in this.hooks[shaderType]) {
-                        if (hDef === 'declarations') continue;
-                        const parts = hDef.split(' ');
-                        const hookType = parts[0], hookName = parts[1];
-                        if (this.hooks.modified[shaderType][hDef]) {
-                            hooks += '#define AUGMENTED_HOOK_' + hookName + '\n';
-                        }
-                        hooks += hookType + ' HOOK_' + hookName + this.hooks[shaderType][hDef] + '\n';
-                    }
-                }
-                return preMain + hooks + m[0] + postMain;
+                // Temporarily replace every "void main" that is NOT followed by
+                // optional whitespace + "(" (i.e. not the real declaration) with a
+                // sentinel that won't match the split.
+                const sentinel = '\x00VOIDMAIN\x00';
+                const safe = src.replace(/void\s+main(?!\s*\()/g, sentinel);
+                const result = _origShaderSrc.call(this, safe, shaderType);
+                // Restore any sentinels back to the original text.
+                return result.replace(new RegExp(sentinel, 'g'), 'void main');
             };
         })();
     </script>
+
 
     <style>
         body {
